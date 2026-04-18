@@ -38,7 +38,10 @@ export function DailyInput({ summaries, storeMonths, onSave, today }: Props) {
   const existingData = storeMonths.find(m => m.year === selYear && m.month === selMonth);
   const dailyCuts: Record<number, number> = existingData?.dailyCuts || {};
 
-  const monthTotal = Object.values(dailyCuts).reduce((s, v) => s + (v as number), 0);
+  const dailySum = Object.values(dailyCuts).reduce((s, v) => s + (v as number), 0);
+  // If a consolidated monthly total exists it is the source of truth; otherwise use daily sum
+  const hasConsolidatedTotal = existingData?.total !== undefined;
+  const monthTotal = hasConsolidatedTotal ? existingData!.total! : dailySum;
   const isCurrentMonth = selYear === currentYear && selMonth === currentMonth;
   const todayDay = today.getDate();
 
@@ -87,6 +90,12 @@ export function DailyInput({ summaries, storeMonths, onSave, today }: Props) {
           </p>
           <p className="text-yellow-400 font-semibold text-sm">
             {monthTotal} <span className="text-gray-400 font-normal">cortes no mês</span>
+            {hasConsolidatedTotal && (
+              <span className="ml-2 text-xs text-blue-400 font-normal">(consolidado)</span>
+            )}
+            {hasConsolidatedTotal && dailySum > 0 && dailySum !== monthTotal && (
+              <span className="ml-1 text-xs text-gray-600 font-normal">/ {dailySum} diário</span>
+            )}
           </p>
         </div>
 

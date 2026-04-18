@@ -28,13 +28,17 @@ export function useBarberData(storeId: string) {
   const summaries = buildSummaries(allMonths, storeData.months);
 
   const setMonthTotal = useCallback(async (year: number, month: number, total: number) => {
+    // Only pass total — storage layer merges, preserving any existing dailyCuts
     const monthData: MonthData = { year, month, total };
     await setMonthDataStorage(storeId, monthData);
     setStoreData(prev => {
       const months = [...prev.months];
       const idx = months.findIndex(m => m.year === year && m.month === month);
-      if (idx >= 0) months[idx] = monthData;
-      else months.push(monthData);
+      if (idx >= 0) {
+        months[idx] = { ...months[idx], total }; // preserve dailyCuts
+      } else {
+        months.push(monthData);
+      }
       return { ...prev, months };
     });
   }, [storeId]);
@@ -48,7 +52,8 @@ export function useBarberData(storeId: string) {
         updatedMonthData = {
           ...months[idx],
           dailyCuts: { ...(months[idx].dailyCuts || {}), [day]: cuts },
-          total: undefined,
+          // Do NOT clear total: if a consolidated monthly total exists it stays
+          // as the source of truth; daily entries are supplementary detail.
         };
         months[idx] = updatedMonthData;
       } else {

@@ -10,7 +10,9 @@ export function MonthlyInput({ summaries, onSave }: Props) {
   const [selected, setSelected] = useState<string>('');
   const [value, setValue] = useState<string>('');
 
-  const historicalMonths = summaries.filter(s => !s.isDailyTracked);
+  // All months are available for consolidated entry.
+  // For daily-tracked months the total overrides the daily sum in reports.
+  const allMonths = summaries;
 
   const handleSave = () => {
     if (!selected || !value) return;
@@ -23,9 +25,14 @@ export function MonthlyInput({ summaries, onSave }: Props) {
 
   return (
     <div className="space-y-4">
-      <h3 className="text-yellow-500 font-semibold uppercase tracking-wider text-sm">
-        Lançamento Mensal (Jan/25 — Fev/26)
-      </h3>
+      <div>
+        <h3 className="text-yellow-500 font-semibold uppercase tracking-wider text-sm">
+          Total Mensal Consolidado
+        </h3>
+        <p className="text-gray-500 text-xs mt-1">
+          Para meses com lançamento diário, o total consolidado sobrepõe a soma diária nos relatórios.
+        </p>
+      </div>
       <div className="flex gap-3 flex-wrap">
         <select
           value={selected}
@@ -33,16 +40,18 @@ export function MonthlyInput({ summaries, onSave }: Props) {
             setSelected(e.target.value);
             if (e.target.value) {
               const [y, m] = e.target.value.split('-').map(Number);
-              const existing = historicalMonths.find(s => s.year === y && s.month === m);
+              const existing = allMonths.find(s => s.year === y && s.month === m);
               setValue(existing?.total ? String(existing.total) : '');
             }
           }}
           className="bg-black border border-gray-700 text-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-yellow-500 flex-1 min-w-40"
         >
           <option value="">Selecione o mês</option>
-          {historicalMonths.map(s => (
+          {[...allMonths].reverse().map(s => (
             <option key={`${s.year}-${s.month}`} value={`${s.year}-${s.month}`}>
-              {s.label} {s.total > 0 ? `(${s.total} cortes)` : ''}
+              {s.label}
+              {s.isDailyTracked ? ' 📅' : ''}
+              {s.total > 0 ? ` (${s.total} cortes)` : ''}
             </option>
           ))}
         </select>
@@ -65,13 +74,21 @@ export function MonthlyInput({ summaries, onSave }: Props) {
 
       {/* Quick overview table */}
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 mt-2">
-        {historicalMonths.map(s => (
+        {allMonths.map(s => (
           <div
             key={`${s.year}-${s.month}`}
-            className={`rounded p-2 text-center text-xs border ${s.total > 0 ? 'border-yellow-800 bg-yellow-900/20' : 'border-gray-800 bg-gray-900'}`}
+            className={`rounded p-2 text-center text-xs border ${
+              s.total > 0 && !s.isDailyTracked ? 'border-yellow-800 bg-yellow-900/20' :
+              s.total > 0 && s.isDailyTracked ? 'border-blue-800 bg-blue-900/20' :
+              'border-gray-800 bg-gray-900'
+            }`}
           >
             <div className="text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis" title={s.label}>{s.label}</div>
-            <div className={`font-bold ${s.total > 0 ? 'text-yellow-400' : 'text-gray-600'}`}>
+            <div className={`font-bold ${
+              s.total > 0 && !s.isDailyTracked ? 'text-yellow-400' :
+              s.total > 0 && s.isDailyTracked ? 'text-blue-400' :
+              'text-gray-600'
+            }`}>
               {s.total > 0 ? s.total : '—'}
             </div>
           </div>

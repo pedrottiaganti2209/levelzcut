@@ -70,7 +70,7 @@ export function MonthlyInput({ summaries, onSave }: Props) {
             key={`${s.year}-${s.month}`}
             className={`rounded p-2 text-center text-xs border ${s.total > 0 ? 'border-yellow-800 bg-yellow-900/20' : 'border-gray-800 bg-gray-900'}`}
           >
-            <div className="text-gray-400">{s.label}</div>
+            <div className="text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis" title={s.label}>{s.label}</div>
             <div className={`font-bold ${s.total > 0 ? 'text-yellow-400' : 'text-gray-600'}`}>
               {s.total > 0 ? s.total : '—'}
             </div>

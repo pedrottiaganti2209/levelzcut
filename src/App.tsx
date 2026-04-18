@@ -62,7 +62,7 @@ export default function App() {
           />
         ) : (
           <>
-            <Reports summaries={summaries} />
+            <Reports summaries={summaries} today={today} />
             <AIInsights summaries={summaries} today={today} />
           </>
         )}

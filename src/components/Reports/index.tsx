@@ -5,9 +5,10 @@ import { MonthTable } from './MonthTable';
 
 interface Props {
   summaries: MonthSummary[];
+  today: Date;
 }
 
-export function Reports({ summaries }: Props) {
+export function Reports({ summaries, today }: Props) {
   const hasData = summaries.some(s => s.total > 0);
 
   if (!hasData) {
@@ -21,9 +22,9 @@ export function Reports({ summaries }: Props) {
 
   return (
     <div className="space-y-6">
-      <StatsCards summaries={summaries} />
-      <MonthlyBarChart summaries={summaries} />
-      <MonthTable summaries={summaries} />
+      <StatsCards summaries={summaries} today={today} />
+      <MonthlyBarChart summaries={summaries} today={today} />
+      <MonthTable summaries={summaries} today={today} />
     </div>
   );
 }

@@ -76,3 +76,16 @@ export function getAverage(summaries: MonthSummary[]): number {
 export function getTotalCuts(summaries: MonthSummary[]): number {
   return summaries.reduce((acc, s) => acc + s.total, 0);
 }
+
+/** Retorna projeção de fechamento do mês vigente com base na média diária até hoje */
+export function getProjection(summary: MonthSummary, today: Date): number | null {
+  const isCurrentMonth =
+    summary.year === today.getFullYear() &&
+    summary.month === today.getMonth() + 1;
+  if (!isCurrentMonth || !summary.isDailyTracked || summary.total === 0) return null;
+  const daysElapsed = today.getDate();
+  if (daysElapsed === 0) return null;
+  const daysInMonth = new Date(summary.year, summary.month, 0).getDate();
+  const dailyAvg = summary.total / daysElapsed;
+  return Math.round(dailyAvg * daysInMonth);
+}

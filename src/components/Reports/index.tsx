@@ -1,4 +1,4 @@
-import type { MonthSummary } from '../../types';
+import type { MonthSummary, MonthData } from '../../types';
 import { StatsCards } from './StatsCards';
 import { MonthlyBarChart } from './BarChart';
 import { MonthTable } from './MonthTable';
@@ -6,9 +6,10 @@ import { MonthTable } from './MonthTable';
 interface Props {
   summaries: MonthSummary[];
   today: Date;
+  storeMonths: MonthData[];
 }
 
-export function Reports({ summaries, today }: Props) {
+export function Reports({ summaries, today, storeMonths }: Props) {
   const hasData = summaries.some(s => s.total > 0);
 
   if (!hasData) {
@@ -23,7 +24,7 @@ export function Reports({ summaries, today }: Props) {
   return (
     <div className="space-y-6">
       <StatsCards summaries={summaries} today={today} />
-      <MonthlyBarChart summaries={summaries} today={today} />
+      <MonthlyBarChart summaries={summaries} today={today} storeMonths={storeMonths} />
       <MonthTable summaries={summaries} today={today} />
     </div>
   );

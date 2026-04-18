@@ -68,7 +68,11 @@ export function MonthlyBarChart({ summaries, today, storeMonths }: Props) {
 
   const handleBarClick = (barData: any) => {
     if (!barData) return;
-    const { year, month } = barData;
+    // Recharts v3: Bar.onClick receives BarRectangleItem where original data is in .payload
+    const entry = barData.payload ?? barData;
+    const year: number = entry.year;
+    const month: number = entry.month;
+    if (!year || !month) return;
     const monthEntry = storeMonths.find(m => m.year === year && m.month === month);
     if (!monthEntry?.dailyCuts || Object.keys(monthEntry.dailyCuts).length === 0) return;
     setModal({ year, month, dailyCuts: monthEntry.dailyCuts });
@@ -95,7 +99,7 @@ export function MonthlyBarChart({ summaries, today, storeMonths }: Props) {
           <YAxis tick={{ fill: '#6b7280', fontSize: 11 }} />
           <Tooltip content={<CustomTooltip />} />
           {/* Barra real */}
-          <Bar dataKey="cuts" stackId="a" radius={[0, 0, 0, 0]} onClick={handleBarClick} style={{ cursor: 'pointer' }}>
+          <Bar dataKey="cuts" stackId="a" radius={[0, 0, 0, 0]} onClick={handleBarClick} activeBar={false}>
             {data.map((entry, idx) => {
               const hasDailyData = storeMonths.some(
                 m => m.year === entry.year && m.month === entry.month && m.dailyCuts && Object.keys(m.dailyCuts).length > 0
@@ -110,7 +114,7 @@ export function MonthlyBarChart({ summaries, today, storeMonths }: Props) {
             })}
           </Bar>
           {/* Barra projetada (trecho restante) */}
-          <Bar dataKey="projectedRemaining" stackId="a" radius={[3, 3, 0, 0]} fill="#D4AF37" fillOpacity={0.25} stroke="#D4AF37" strokeOpacity={0.5} strokeWidth={1} onClick={handleBarClick} style={{ cursor: 'pointer' }} />
+          <Bar dataKey="projectedRemaining" stackId="a" radius={[3, 3, 0, 0]} fill="#D4AF37" fillOpacity={0.25} stroke="#D4AF37" strokeOpacity={0.5} strokeWidth={1} onClick={handleBarClick} activeBar={false} />
         </BarChart>
       </ResponsiveContainer>
 

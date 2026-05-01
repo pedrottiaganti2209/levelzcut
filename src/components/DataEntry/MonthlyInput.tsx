@@ -83,7 +83,10 @@ export function MonthlyInput({ summaries, onSave }: Props) {
               'border-gray-800 bg-gray-900'
             }`}
           >
-            <div className="text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis" title={s.label}>{s.label}</div>
+            <div className="text-gray-400 leading-tight" title={s.label}>
+              <div className="text-[10px] font-medium">{s.label.split('/')[0]}</div>
+              <div className="text-gray-600 text-[9px]">/{s.label.split('/')[1]}</div>
+            </div>
             <div className={`font-bold ${
               s.total > 0 && !s.isDailyTracked ? 'text-yellow-400' :
               s.total > 0 && s.isDailyTracked ? 'text-blue-400' :

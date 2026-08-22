@@ -30,6 +30,41 @@ export async function fetchStores(): Promise<Store[]> {
   return (data as StoreRow[]).map(rowToStore);
 }
 
+type BarberStoreRow = { stores: StoreRow | null };
+
+/**
+ * Lojas que ESTE usuário (barbeiro) tem acesso liberado, via `barber_stores`
+ * (migration 003) — usado pro seletor de loja do topo depois do H9, quando
+ * a RLS de `cuts_data` (migration 004) passa a restringir por loja de
+ * verdade. Não usar pro painel de administração: lá o admin precisa ver
+ * TODAS as lojas (use `fetchStores()`), não só as próprias.
+ *
+ * Diferente de `fetchStores()`, um resultado vazio aqui é um estado válido
+ * (barbeiro convidado mas ainda sem nenhuma loja liberada) — só cai no
+ * fallback fixo em caso de erro de verdade (ex.: migration 003/004 ainda
+ * não rodou nesse projeto), nunca por causa de lista vazia.
+ */
+export async function fetchAccessibleStores(userId: string): Promise<Store[]> {
+  if (!supabase) return STORES_FALLBACK;
+
+  const { data, error } = await supabase
+    .from('barber_stores')
+    .select('stores (id, name, display_name)')
+    .eq('user_id', userId);
+
+  if (error) {
+    reportError(error, 'stores.fetchAccessibleStores');
+    return STORES_FALLBACK;
+  }
+
+  const rows = (data ?? []) as unknown as BarberStoreRow[];
+  return rows
+    .map((row) => row.stores)
+    .filter((s): s is StoreRow => s !== null)
+    .map(rowToStore)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export async function createStore(store: Store): Promise<{ error: Error | null }> {
   if (!supabase) return { error: new Error('Supabase não está configurado.') };
   const { error } = await supabase.from('stores').insert({

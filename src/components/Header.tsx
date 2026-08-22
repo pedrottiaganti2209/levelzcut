@@ -1,4 +1,10 @@
-export function Header() {
+import { LogOut } from 'lucide-react';
+
+interface HeaderProps {
+  onSignOut?: () => void;
+}
+
+export function Header({ onSignOut }: HeaderProps) {
   return (
     <header className="bg-black border-b border-yellow-600 py-4 px-6">
       <div className="max-w-6xl mx-auto flex items-center gap-4">
@@ -19,8 +25,18 @@ export function Header() {
           <h1 className="text-2xl font-bold text-yellow-500 tracking-widest uppercase">LevelzCut</h1>
           <p className="text-xs text-yellow-600/80 tracking-wider uppercase">Moema · by FioNavalha</p>
         </div>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-4">
           <span className="text-xs text-gray-500 uppercase tracking-widest">Dashboard Gerencial</span>
+          {onSignOut && (
+            <button
+              onClick={onSignOut}
+              className="flex items-center gap-1 text-xs text-gray-400 hover:text-yellow-500 transition-colors uppercase tracking-wider"
+              title="Sair"
+            >
+              <LogOut size={14} />
+              Sair
+            </button>
+          )}
         </div>
       </div>
     </header>

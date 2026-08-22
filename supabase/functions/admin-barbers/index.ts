@@ -1,12 +1,14 @@
-// Supabase Edge Function (Deno) — H8: gerenciar barbeiros (listar, convidar,
-// editar acesso a loja).
+// Supabase Edge Function (Deno) — H8/H10: gerenciar barbeiros (listar,
+// cadastrar com senha temporária, editar acesso a loja).
 //
 // Por que isso existe como função separada, e não como código do app:
 // criar um usuário e vincular lojas exige a service role key do Supabase,
 // que tem privilégio total e NUNCA pode existir no bundle do navegador.
 // Esta função roda no servidor do Supabase, recebe o JWT de quem chamou,
 // confirma que essa pessoa é admin (consultando `profiles` com a service
-// role, sem depender de RLS aqui) e só então executa a ação.
+// role, sem depender de RLS aqui) e só então executa a ação — exceto
+// `complete_password_setup` (H10), que qualquer usuário autenticado pode
+// chamar pra limpar a PRÓPRIA flag de senha temporária, ver mais abaixo.
 //
 // DEPLOY: passo manual, feito pelo dono do projeto — a squad não tem
 // acesso à conta Supabase pra rodar isso. Ver README (seção H8) pro passo
@@ -68,25 +70,43 @@ async function listBarbers(adminClient: ReturnType<typeof createClient>): Promis
   }));
 }
 
-async function inviteBarber(
+// Gera uma senha temporária curta (12 caracteres), aleatória o suficiente
+// pra uma senha de vida curta (é trocada obrigatoriamente no primeiro
+// login — ver migration 005 e ChangePassword.tsx no front). Evita
+// depender de email configurado no projeto pra cadastrar alguém (H10).
+function generateTempPassword(): string {
+  return crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+}
+
+async function createBarber(
   adminClient: ReturnType<typeof createClient>,
   email: string,
   storeIds: string[]
-): Promise<{ userId: string; email: string }> {
+): Promise<{ userId: string; email: string; tempPassword: string }> {
   if (!email || !email.includes('@')) throw new Error('Email inválido.');
 
-  // Envia o email de convite do próprio Supabase — o barbeiro define a
-  // própria senha, o admin nunca precisa criar/compartilhar uma senha
-  // temporária. Exige o envio de email configurado no projeto (Supabase
-  // usa um provedor padrão com limite baixo; pra produção de verdade,
-  // configurar SMTP customizado em Authentication → Emails).
-  const { data, error } = await adminClient.auth.admin.inviteUserByEmail(email);
+  // H10: cria a conta já com senha temporária definida pelo servidor, em
+  // vez do convite por email do H8 — não depende do provedor de email do
+  // Supabase estar configurado/testado. `email_confirm: true` pula a
+  // confirmação por email (não tem link de confirmação sendo enviado
+  // aqui). A senha só é retornada UMA VEZ nesta resposta — o admin
+  // precisa repassar ao barbeiro por fora (WhatsApp, verbalmente etc.);
+  // não fica salva em lugar nenhum recuperável depois disso.
+  const tempPassword = generateTempPassword();
+  const { data, error } = await adminClient.auth.admin.createUser({
+    email,
+    password: tempPassword,
+    email_confirm: true,
+  });
   if (error) throw error;
   const userId = data.user.id;
 
+  // must_change_password: true — obrigatório trocar essa senha temporária
+  // antes de ver qualquer coisa do dashboard (ver ação
+  // complete_password_setup abaixo, e ChangePassword.tsx no front).
   const { error: profileError } = await adminClient
     .from('profiles')
-    .upsert({ user_id: userId, role: 'barbeiro' }, { onConflict: 'user_id' });
+    .upsert({ user_id: userId, role: 'barbeiro', must_change_password: true }, { onConflict: 'user_id' });
   if (profileError) throw profileError;
 
   if (storeIds.length > 0) {
@@ -96,7 +116,23 @@ async function inviteBarber(
     if (storesError) throw storesError;
   }
 
-  return { userId, email };
+  return { userId, email, tempPassword };
+}
+
+async function completePasswordSetup(
+  adminClient: ReturnType<typeof createClient>,
+  callerId: string
+): Promise<{ ok: true }> {
+  // Ação deliberadamente SEM checagem de admin — qualquer usuário
+  // autenticado pode chamar isso, mas só limpa a PRÓPRIA flag: callerId
+  // vem do JWT já verificado no dispatcher abaixo, nunca de um campo que
+  // o cliente poderia manipular no corpo da requisição.
+  const { error } = await adminClient
+    .from('profiles')
+    .update({ must_change_password: false })
+    .eq('user_id', callerId);
+  if (error) throw error;
+  return { ok: true };
 }
 
 async function updateAccess(
@@ -143,8 +179,19 @@ Deno.serve(async (req: Request) => {
     if (userError || !user) return json({ error: 'Sessão inválida.' }, 401);
 
     // Client com privilégio total — só usado DEPOIS de confirmar que quem
-    // chamou é admin, e nunca exposto de volta ao chamador.
+    // chamou é admin (exceto pra complete_password_setup, ver abaixo), e
+    // nunca exposto de volta ao chamador.
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+    const body = await req.json();
+
+    // complete_password_setup é a ÚNICA ação que não exige ser admin —
+    // qualquer usuário autenticado pode chamar, mas só pra limpar a
+    // PRÓPRIA flag de senha temporária (H10). Todas as outras ações
+    // exigem role='admin', confirmado logo abaixo.
+    if (body.action === 'complete_password_setup') {
+      return json(await completePasswordSetup(adminClient, user.id));
+    }
 
     const { data: callerProfile } = await adminClient
       .from('profiles')
@@ -156,13 +203,11 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'Só administradores podem gerenciar barbeiros.' }, 403);
     }
 
-    const body = await req.json();
-
     switch (body.action) {
       case 'list':
         return json(await listBarbers(adminClient));
-      case 'invite':
-        return json(await inviteBarber(adminClient, body.email, body.storeIds ?? []));
+      case 'create_barber':
+        return json(await createBarber(adminClient, body.email, body.storeIds ?? []));
       case 'update_access':
         return json(await updateAccess(adminClient, body.userId, body.storeIds ?? []));
       default:

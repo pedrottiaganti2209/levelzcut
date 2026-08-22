@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Users, UserPlus, RefreshCw } from 'lucide-react';
+import { Users, UserPlus, RefreshCw, Copy, Check } from 'lucide-react';
 import { useStores } from '../../hooks/useStores';
-import { listBarbers, inviteBarber, updateBarberAccess, type Barber } from '../../lib/adminApi';
+import { listBarbers, createBarber, updateBarberAccess, type Barber } from '../../lib/adminApi';
 
 export function BarbersPanel() {
   const { stores } = useStores();
@@ -14,6 +14,11 @@ export function BarbersPanel() {
   const [selectedStores, setSelectedStores] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Aparece uma vez, logo depois de cadastrar — a senha temporária não
+  // fica salva em lugar nenhum recuperável depois disso (H10).
+  const [createdCredential, setCreatedCredential] = useState<{ email: string; tempPassword: string } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editingStores, setEditingStores] = useState<string[]>([]);
@@ -39,7 +44,7 @@ export function BarbersPanel() {
     setList(list.includes(storeId) ? list.filter((s) => s !== storeId) : [...list, storeId]);
   };
 
-  const handleInvite = async (e: FormEvent) => {
+  const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
     setFormError(null);
     if (!email.includes('@')) {
@@ -47,7 +52,7 @@ export function BarbersPanel() {
       return;
     }
     setSaving(true);
-    const { error } = await inviteBarber(email, selectedStores);
+    const { data, error } = await createBarber(email, selectedStores);
     setSaving(false);
     if (error) {
       setFormError(error);
@@ -56,7 +61,20 @@ export function BarbersPanel() {
     setEmail('');
     setSelectedStores([]);
     setShowForm(false);
+    setCopied(false);
+    if (data) setCreatedCredential({ email: data.email, tempPassword: data.tempPassword });
     reload();
+  };
+
+  const copyTempPassword = async () => {
+    if (!createdCredential) return;
+    try {
+      await navigator.clipboard.writeText(createdCredential.tempPassword);
+      setCopied(true);
+    } catch {
+      // Sem permissão de clipboard ou API indisponível — a senha continua
+      // visível e selecionável na tela, só não copia com um clique.
+    }
   };
 
   const startEditing = (barber: Barber) => {
@@ -91,7 +109,7 @@ export function BarbersPanel() {
             onClick={() => setShowForm((v) => !v)}
             className="flex items-center gap-1 bg-yellow-600 text-black text-xs font-medium rounded px-3 py-1.5 uppercase tracking-wider hover:bg-yellow-500 transition-colors"
           >
-            <UserPlus size={14} /> Convidar
+            <UserPlus size={14} /> Cadastrar barbeiro
           </button>
         </div>
       </div>
@@ -102,8 +120,37 @@ export function BarbersPanel() {
         </p>
       )}
 
+      {createdCredential && (
+        <div className="bg-gray-900 border border-yellow-700 rounded-lg p-4 space-y-2">
+          <p className="text-sm text-yellow-500 font-medium">Barbeiro cadastrado — repasse a senha temporária agora</p>
+          <p className="text-xs text-gray-400">
+            Essa senha só aparece uma vez aqui. {createdCredential.email} vai precisar trocá-la no primeiro login.
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 bg-black border border-gray-700 rounded px-3 py-2 text-sm text-yellow-400 select-all">
+              {createdCredential.tempPassword}
+            </code>
+            <button
+              type="button"
+              onClick={copyTempPassword}
+              className="flex items-center gap-1 text-xs text-gray-400 hover:text-yellow-500 transition-colors uppercase tracking-wider px-2 py-2"
+            >
+              {copied ? <Check size={14} /> : <Copy size={14} />}
+              {copied ? 'Copiado' : 'Copiar'}
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCreatedCredential(null)}
+            className="text-xs text-gray-400 hover:text-gray-200 transition-colors uppercase tracking-wider"
+          >
+            Fechar
+          </button>
+        </div>
+      )}
+
       {showForm && (
-        <form onSubmit={handleInvite} className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
+        <form onSubmit={handleCreate} className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
           <div className="space-y-1">
             <label htmlFor="barber-email" className="text-xs text-gray-400 uppercase tracking-wider">
               Email
@@ -143,7 +190,7 @@ export function BarbersPanel() {
             disabled={saving}
             className="w-full bg-yellow-600 text-black font-medium rounded py-2 text-sm uppercase tracking-wider hover:bg-yellow-500 transition-colors disabled:opacity-50"
           >
-            {saving ? 'Enviando...' : 'Enviar convite'}
+            {saving ? 'Cadastrando...' : 'Cadastrar'}
           </button>
         </form>
       )}

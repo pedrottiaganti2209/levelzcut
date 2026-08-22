@@ -34,10 +34,26 @@ export function listBarbers() {
   return invoke<Barber[]>('list');
 }
 
-export function inviteBarber(email: string, storeIds: string[]) {
-  return invoke<{ userId: string; email: string }>('invite', { email, storeIds });
+/**
+ * Cadastra um barbeiro com senha temporária gerada pelo servidor (H10) —
+ * substitui o convite por email do H8. O `tempPassword` retornado só
+ * aparece essa uma vez; a UI precisa mostrar/copiar na hora, porque não
+ * tem como recuperar depois.
+ */
+export function createBarber(email: string, storeIds: string[]) {
+  return invoke<{ userId: string; email: string; tempPassword: string }>('create_barber', { email, storeIds });
 }
 
 export function updateBarberAccess(userId: string, storeIds: string[]) {
   return invoke<{ ok: true }>('update_access', { userId, storeIds });
+}
+
+/**
+ * Chamado pelo próprio barbeiro (não precisa ser admin) depois de trocar
+ * a senha temporária — limpa a flag `must_change_password` da própria
+ * linha em `profiles` (H10). Ver ação `complete_password_setup` na Edge
+ * Function.
+ */
+export function completePasswordSetup() {
+  return invoke<{ ok: true }>('complete_password_setup');
 }

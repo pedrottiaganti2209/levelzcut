@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { Header } from './components/Header';
 import { Login } from './components/Login';
+import { ChangePassword } from './components/ChangePassword';
 import { StoreSelector } from './components/StoreSelector';
 import { DataEntry } from './components/DataEntry';
 import { Reports } from './components/Reports';
@@ -22,7 +23,7 @@ export default function App() {
 
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(isAuthRequired);
-  const { isAdmin } = useUserRole(session);
+  const { isAdmin, mustChangePassword, loading: roleLoading, markPasswordChanged } = useUserRole(session);
   // H9: lista de lojas já vem filtrada pro que ESTE usuário pode acessar
   // (admin vê todas; barbeiro só as que tiver liberadas em barber_stores).
   const { stores, loading: storesLoading } = useAccessibleStores(session, isAdmin);
@@ -73,6 +74,22 @@ export default function App() {
 
   if (isAuthRequired && !session) {
     return <Login />;
+  }
+
+  // Espera saber role/mustChangePassword antes de desenhar qualquer coisa
+  // do dashboard — evita mostrar dados de faturamento por uma fração de
+  // segundo antes da tela de trocar senha aparecer, pra quem ainda está
+  // com a senha temporária (H10).
+  if (isAuthRequired && roleLoading) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        <RefreshCw size={32} className="animate-spin text-yellow-600" />
+      </div>
+    );
+  }
+
+  if (isAuthRequired && mustChangePassword) {
+    return <ChangePassword onDone={markPasswordChanged} />;
   }
 
   return (

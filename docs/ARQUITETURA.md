@@ -1,7 +1,8 @@
 # LevelzCut — Documentação Técnica
 
-Estado do sistema em 2026-08-22, ao final das histórias H1–H9 do backlog de
-hardening. Este documento é para quem for dar manutenção no código depois —
+Estado do sistema em 2026-08-22, ao final das histórias H1–H10 do backlog
+de hardening. Este documento é para quem for dar manutenção no código
+depois —
 descreve arquitetura, modelo de dados, autenticação/autorização, feature
 flags, CI, monitoramento, deploy e a dívida técnica conhecida.
 
@@ -43,24 +44,25 @@ src/
   App.tsx                 # composição raiz: sessão, abas, gates de feature
   components/
     Header.tsx, Login.tsx, StoreSelector.tsx
+    ChangePassword.tsx        # troca de senha obrigatória (H10)
     DataEntry/             # lançamento de cortes (diário/mensal)
     Reports/                # relatórios, gráficos, tabela mensal
     AIInsights.tsx           # insights derivados dos dados
-    Admin/                    # painel de administração (H6–H8)
+    Admin/                    # painel de administração (H6–H8, H10)
       index.tsx                 # sub-tabs Lojas / Barbeiros
       StoresPanel.tsx            # cadastro de lojas
-      BarbersPanel.tsx            # convite + gestão de acesso de barbeiros
+      BarbersPanel.tsx            # cadastro (senha temporária) + gestão de acesso
   hooks/
     useBarberData.ts        # carrega/salva dados de faturamento por loja
     useStores.ts              # carrega TODAS as lojas (só usado no painel de admin, H6)
     useAccessibleStores.ts      # lojas que O USUÁRIO ATUAL pode acessar (H9)
-    useUserRole.ts                # resolve role do usuário logado (H6)
+    useUserRole.ts                # resolve role + must_change_password (H6, H10)
   lib/
     supabase.ts              # client Supabase + helpers de auth + flag isAuthRequired (VITE_REQUIRE_AUTH)
     sentry.ts                    # init + reportError, atrás de VITE_SENTRY_DSN
     stores.ts                     # CRUD de lojas + fetchAccessibleStores (H6/H9)
-    profile.ts                      # fetchMyRole — nunca assume admin (H6)
-    adminApi.ts                       # chamadas à Edge Function admin-barbers (H8)
+    profile.ts                      # fetchMyRole + fetchMustChangePassword (H6, H10)
+    adminApi.ts                       # chamadas à Edge Function admin-barbers (H8, H10)
   utils/
     storage.ts               # persistência local/Supabase de cuts_data
     analytics.ts, insights.ts  # cálculos derivados
@@ -71,8 +73,9 @@ supabase/
     002_require_auth.sql        # policy de auth em cuts_data (H1, manual — dispensável após H9)
     003_stores_roles_barber_access.sql  # stores/profiles/barber_stores (H6, manual)
     004_barber_store_access_restriction.sql  # restringe cuts_data por loja (H9, manual)
+    005_must_change_password.sql  # coluna must_change_password em profiles (H10, manual)
   functions/
-    admin-barbers/              # Edge Function (Deno) — convite/gestão de barbeiros (H8)
+    admin-barbers/              # Edge Function (Deno) — cadastro/gestão de barbeiros (H8, H10)
 ```
 
 Nenhuma migration roda automaticamente contra o Supabase real — todas
@@ -123,9 +126,11 @@ aditiva, RLS em todas as tabelas):
   `ON CONFLICT (id) DO NOTHING`, então rodar a migration não duplica nem
   altera a loja existente.
 - **`profiles`** — `user_id` (→ `auth.users`), `role` (`'admin'` |
-  `'barbeiro'`, padrão `'barbeiro'`). Todo usuário novo entra como
-  barbeiro; virar admin é uma ação deliberada (via UI, por outro admin, ou
-  manualmente por SQL pro primeiro admin — "bootstrap", ver README).
+  `'barbeiro'`, padrão `'barbeiro'`), e desde o H10 também
+  `must_change_password` (boolean, padrão `true` — ver seção 5.5). Todo
+  usuário novo entra como barbeiro; virar admin é uma ação deliberada
+  (via UI, por outro admin, ou manualmente por SQL pro primeiro admin —
+  "bootstrap", ver README).
 - **`barber_stores`** — `user_id` + `store_id` (chave composta). Quais
   lojas cada barbeiro pode acessar — aplicado como restrição real em
   `cuts_data` desde o H9 (seção 5.3).
@@ -187,26 +192,57 @@ Um barbeiro sem nenhuma loja liberada não vê um dashboard vazio/quebrado:
 `App.tsx` computa `noAccessibleStores` e mostra um aviso explícito em vez
 da tela normal, orientando a pedir acesso a um admin.
 
-### 5.4 Edge Function `admin-barbers` (H8)
+### 5.4 Edge Function `admin-barbers` (H8, H10)
 
-Convidar um barbeiro (`auth.admin.inviteUserByEmail`) e listar todos os
-usuários (`auth.admin.listUsers`) são operações admin-only da API do
-Supabase que exigem a **service_role key** — uma chave que ignora RLS por
-completo e **nunca** pode ir pro bundle do cliente. Por isso essas ações
-passam por uma Edge Function (Deno, hospedada no próprio Supabase, fora do
-bundle do Vite):
+Cadastrar um barbeiro e listar todos os usuários (`auth.admin.listUsers`)
+são operações admin-only da API do Supabase que exigem a **service_role
+key** — uma chave que ignora RLS por completo e **nunca** pode ir pro
+bundle do cliente. Por isso essas ações passam por uma Edge Function
+(Deno, hospedada no próprio Supabase, fora do bundle do Vite):
 
 1. Recebe o request com o JWT de quem está chamando (`Authorization`
    header).
 2. Cria um client com a **anon key** + esse JWT só pra identificar quem é o
    usuário (`auth.getUser()`).
-3. Confirma no banco que `profiles.role === 'admin'` pra esse usuário.
+3. Confirma no banco que `profiles.role === 'admin'` pra esse usuário —
+   **exceto** pra ação `complete_password_setup` (H10), que qualquer
+   usuário autenticado pode chamar, mas só pra limpar a PRÓPRIA flag de
+   senha temporária (o `user.id` vem do JWT já verificado, nunca do corpo
+   da requisição).
 4. **Só então** cria um client com a service_role key e executa a ação
-   (`list`, `invite`, `update_access`).
+   (`list`, `create_barber`, `update_access`).
 
 Ou seja, a função reverifica admin no servidor — nunca confia numa claim de
 role vinda do cliente. Deploy e a secret `SUPABASE_SERVICE_ROLE_KEY` são
 passos manuais fora do acesso deste squad (comandos no README).
+
+### 5.5 Cadastro com senha temporária (H10)
+
+O H8 original convidava por email (`auth.admin.inviteUserByEmail`) — o
+barbeiro definia a própria senha, mas dependia do envio de email
+funcionar no projeto (provedor padrão do Supabase, limite baixo, nunca
+testado por este squad). O H10 troca isso por
+`auth.admin.createUser({ email, password: tempPassword, email_confirm:
+true })`, com uma senha temporária de 12 caracteres gerada na própria
+Edge Function (`crypto.randomUUID()`), sem depender de email nenhum.
+
+A senha volta na resposta do cadastro **uma única vez** — a UI
+(`BarbersPanel.tsx`) mostra com um botão de copiar e um aviso de que ela
+não aparece de novo; o admin repassa por fora (WhatsApp, verbalmente
+etc.). A conta nasce com `profiles.must_change_password = true`
+(coluna nova, migration `005_must_change_password.sql`), e
+`App.tsx`/`hooks/useUserRole.ts` bloqueiam TODO o resto do dashboard —
+inclusive antes de saber se a pessoa tem acesso a alguma loja — até
+`components/ChangePassword.tsx` confirmar uma senha nova
+(`supabase.auth.updateUser({ password })`, chamada padrão de
+autenticação, sem privilégio nenhum) e chamar
+`complete_password_setup` pra limpar a flag.
+
+Contas que já existiam antes do H10 (o admin do bootstrap, e qualquer
+barbeiro convidado pelo fluxo antigo de email) não são afetadas — a
+migration zera a flag pra todo mundo que já tinha `profiles` na hora em
+que ela roda; só contas criadas depois, via `create_barber`, nascem com
+a flag ligada de propósito.
 
 ## 6. CI (H3)
 
@@ -235,10 +271,23 @@ build`. Não faz deploy — é só gate de qualidade antes do merge.
   (`useStores.ts`, `useUserRole.ts`) e H9 mais 1
   (`useAccessibleStores.ts`) — total de 12, todos o mesmo padrão já
   aceito no código existente (chamar uma função que atualiza estado
-  dentro de um `useEffect` de "carregar uma vez"). Não é regressão de
-  comportamento (zero falha de teste/build), mas é uma refatoração
-  pendente: nenhum desses hooks usa o padrão mais novo recomendado pelo
-  eslint-plugin-react-hooks pra evitar o warning.
+  dentro de um `useEffect` de "carregar uma vez"). H10 não introduziu
+  nenhum erro novo (a mudança em `useUserRole.ts` reaproveita o mesmo
+  efeito já contado). Não é regressão de comportamento (zero falha de
+  teste/build), mas é uma refatoração pendente: nenhum desses hooks usa
+  o padrão mais novo recomendado pelo eslint-plugin-react-hooks pra
+  evitar o warning.
+- **Entrega da senha temporária é 100% manual (H10)**: não tem email nem
+  SMS — o admin vê a senha uma vez na tela e precisa repassar por fora
+  (WhatsApp, verbalmente). Funciona, mas é um passo humano em toda
+  contratação; se o volume de cadastro crescer, vale revisitar (SMTP
+  customizado configurado + voltar a usar convite por email, por
+  exemplo).
+- **Senha temporária não expira sozinha**: `must_change_password` só
+  vira `false` quando o barbeiro efetivamente troca a senha — não tem
+  expiração automática por tempo. Se alguém nunca fizer o primeiro
+  login, a senha temporária gerada continua válida indefinidamente até
+  alguém (admin) desativar a conta manualmente pelo Supabase Dashboard.
 - **Um admin com muitas lojas ainda não tem UI de filtro**: `useStores()`
   no painel de admin sempre lista todas as lojas sem paginação/busca — não
   é problema com 1-2 lojas, mas se a rede crescer bastante vale revisitar.
@@ -248,10 +297,12 @@ build`. Não faz deploy — é só gate de qualidade antes do merge.
   pra Lighthouse), mas é candidato a code-splitting se a lista de
   telas continuar crescendo.
 - **Testes de UI de administração são superficiais**: os testes de
-  `App.adminTab.test.tsx` cobrem a regra crítica de visibilidade da aba
-  (nunca aparece sem flag, aparece só pra admin), mas não há testes de
-  componente pra `StoresPanel`/`BarbersPanel` isoladamente (fluxo de
-  criar loja, convidar barbeiro, editar acesso).
+  `App.adminTab.test.tsx`/`App.mustChangePassword.test.tsx` cobrem as
+  regras críticas de visibilidade e do gate de senha (nunca aparece sem
+  flag, aparece só pra admin, bloqueia até trocar a senha temporária),
+  mas não há testes de componente pra `StoresPanel`/`BarbersPanel`
+  isoladamente (fluxo de criar loja, cadastrar barbeiro, copiar senha
+  temporária, editar acesso).
 - **Edge Function sem teste automatizado**: `admin-barbers/index.ts`
   roda em Deno e não tem cobertura de teste neste repo (rodar Deno/Docker
   localmente está fora do que este squad consegue validar sem acesso ao
@@ -264,16 +315,22 @@ build`. Não faz deploy — é só gate de qualidade antes do merge.
 
 ## 9. Passos manuais pendentes (fora do acesso deste squad)
 
-1. Rodar `supabase/migrations/003_stores_roles_barber_access.sql` no SQL
+1. Aplicar os patches de código (H6–H10) numa sessão com push liberado,
+   e abrir o(s) PR(s).
+2. Rodar `supabase/migrations/003_stores_roles_barber_access.sql` no SQL
    Editor do Supabase.
-2. Bootstrap do primeiro admin (`insert into profiles ...`, ver README).
-3. `supabase functions deploy admin-barbers` + `supabase secrets set
+3. Bootstrap do primeiro admin (`insert into profiles ...`, ver README).
+4. Rodar `supabase/migrations/005_must_change_password.sql` (pode ser
+   antes ou depois do passo 3 — não depende de admin nenhum existir
+   ainda).
+5. `supabase functions deploy admin-barbers` + `supabase secrets set
    SUPABASE_SERVICE_ROLE_KEY=...`.
-4. Convidar/cadastrar cada barbeiro que já usa o painel e liberar a(s)
-   loja(s) dele em Administração → Barbeiros.
-5. Testar login em produção e avisar a equipe (mesma ordem de sempre).
-6. Rodar a query de verificação do arquivo
+6. Cadastrar cada barbeiro que já usa o painel (Administração →
+   Barbeiros → Cadastrar barbeiro) e liberar a(s) loja(s) dele — anotar
+   a senha temporária mostrada na hora e repassar por fora.
+7. Testar login em produção e avisar a equipe (mesma ordem de sempre).
+8. Rodar a query de verificação do arquivo
    `004_barber_store_access_restriction.sql` e, só com resultado vazio,
    aplicar essa migration.
-7. Só depois de tudo isso testado: decidir quando ligar
+9. Só depois de tudo isso testado: decidir quando ligar
    `VITE_REQUIRE_AUTH=true` em produção.

@@ -49,6 +49,7 @@ describe('App — aba de Administração', () => {
     });
     vi.doMock('../lib/profile', () => ({
       fetchMyRole: vi.fn().mockResolvedValue('admin'),
+      fetchMustChangePassword: vi.fn().mockResolvedValue(false),
     }));
 
     const { default: App } = await import('../App');
@@ -74,6 +75,7 @@ describe('App — aba de Administração', () => {
     });
     vi.doMock('../lib/profile', () => ({
       fetchMyRole: vi.fn().mockResolvedValue('barbeiro'),
+      fetchMustChangePassword: vi.fn().mockResolvedValue(false),
     }));
 
     const { default: App } = await import('../App');

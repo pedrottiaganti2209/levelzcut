@@ -107,6 +107,8 @@ describe('App — acesso a lojas por barbeiro (H9)', () => {
 
     await waitFor(() => expect(screen.getByText('LevelzCut Moema')).toBeTruthy());
     expect(screen.getByText('LevelzCut Vila Madalena')).toBeTruthy();
-    expect(await screen.findByText('Administração')).toBeTruthy();
+    // H11: administração virou um app à parte — mesmo admin logado aqui no
+    // app de barbeiro não vê nada disso, só o dashboard normal.
+    expect(screen.queryByText('Administração')).toBeNull();
   });
 });

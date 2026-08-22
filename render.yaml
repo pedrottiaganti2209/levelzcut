@@ -1,4 +1,6 @@
 services:
+  # App de barbeiro — relatórios e lançamento de dados. Serviço original,
+  # sem nenhuma mudança de configuração (H11).
   - type: web
     name: levelzcut
     env: static
@@ -8,3 +10,18 @@ services:
       - type: rewrite
         source: /*
         destination: /index.html
+
+  # App de administração — cadastro de lojas e barbeiros (H11). Publicado
+  # como um serviço à parte, com sua própria URL. Se este projeto não foi
+  # criado a partir deste blueprint (render.yaml) originalmente, criar esse
+  # serviço manualmente no dashboard do Render em vez de esperar o sync
+  # automático — ver README.md, seção "Dois apps, duas URLs (H11)".
+  - type: web
+    name: levelzcut-admin
+    env: static
+    buildCommand: npm install && npm run build:admin
+    staticPublishPath: ./dist-admin
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /admin.html

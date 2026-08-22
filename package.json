@@ -5,9 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:admin": "vite --config vite.config.admin.ts",
     "build": "tsc -b && vite build",
+    "build:admin": "tsc -b && vite build --config vite.config.admin.ts",
     "lint": "eslint .",
     "preview": "vite preview",
+    "preview:admin": "vite preview --config vite.config.admin.ts",
     "test": "vitest run"
   },
   "dependencies": {

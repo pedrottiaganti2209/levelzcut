@@ -2,9 +2,11 @@ import { LogOut } from 'lucide-react';
 
 interface HeaderProps {
   onSignOut?: () => void;
+  /** H11: o app de administração reaproveita este Header com um rótulo diferente. */
+  subtitle?: string;
 }
 
-export function Header({ onSignOut }: HeaderProps) {
+export function Header({ onSignOut, subtitle = 'Dashboard Gerencial' }: HeaderProps) {
   return (
     <header className="bg-black border-b border-yellow-600 py-4 px-6">
       <div className="max-w-6xl mx-auto flex items-center gap-4">
@@ -26,7 +28,7 @@ export function Header({ onSignOut }: HeaderProps) {
           <p className="text-xs text-yellow-600/80 tracking-wider uppercase">Moema · by FioNavalha</p>
         </div>
         <div className="ml-auto flex items-center gap-4">
-          <span className="text-xs text-gray-500 uppercase tracking-widest">Dashboard Gerencial</span>
+          <span className="text-xs text-gray-500 uppercase tracking-widest">{subtitle}</span>
           {onSignOut && (
             <button
               onClick={onSignOut}

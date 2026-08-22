@@ -90,6 +90,31 @@ que permite acesso com a anon key independentemente do login do app —
 travar isso no banco é uma migration separada, aditiva e aplicada
 manualmente (fora do escopo desta história).
 
+## Monitoramento de disponibilidade (uptime)
+
+O app não tem servidor próprio (é estático, hospedado no Render), então o
+monitoramento de disponibilidade é feito por um serviço externo apontando
+para a URL pública — não tem código envolvido nisto.
+
+**Configuração recomendada: [UptimeRobot](https://uptimerobot.com/) (plano gratuito)**
+
+1. Crie uma conta gratuita em uptimerobot.com.
+2. **Add New Monitor**:
+   - Monitor Type: `HTTP(s)`
+   - Friendly Name: `LevelzCut Dashboard`
+   - URL: `https://levelzcut.onrender.com/`
+   - Monitoring Interval: `5 minutes` (o menor intervalo do plano gratuito —
+     atende ao critério de alertar em até 5 min de indisponibilidade)
+3. Em **Alert Contacts**, adicione e confirme o email (ou outro canal
+   suportado no plano gratuito, como Slack/Telegram via integração) que deve
+   receber o aviso, e associe esse contato ao monitor criado no passo 2.
+4. Salve. A partir daí, qualquer indisponibilidade do domínio do Render é
+   detectada no próximo check (até 5 min) e dispara o alerta configurado.
+
+Isso é uma conta pessoal/da organização no UptimeRobot — a squad não tem
+esse acesso, então essa configuração é sempre um passo manual de quem tem
+a conta.
+
 ## Estrutura do projeto
 
 ```

@@ -141,7 +141,7 @@ Isso é uma conta pessoal/da organização no UptimeRobot — a squad não tem
 esse acesso, então essa configuração é sempre um passo manual de quem tem
 a conta.
 
-## Administração: lojas e barbeiros (H6–H9)
+## Administração: lojas e barbeiros (H6–H10)
 
 Jornada do dono da barbearia: um admin loga, cadastra lojas (hoje só existe
 "Moema", mas o modelo já suporta várias) e convida barbeiros, escolhendo a
@@ -215,18 +215,18 @@ pro array fixo de `types/index.ts` se o Supabase não estiver configurado ou
 a migration 003 ainda não tiver rodado — o seletor de loja no topo do app
 (`StoreSelector`) nunca fica vazio.
 
-### Painel de Barbeiros (H8)
+### Painel de Barbeiros (H8, cadastro revisado no H10)
 
-Aba **Administração → Barbeiros**: convida barbeiro por email e marca quais
-lojas ele acessa; lista os barbeiros existentes com opção de editar o
-acesso depois. Isso **precisa** de uma Edge Function
-(`supabase/functions/admin-barbers`), porque convidar usuário
-(`auth.admin.inviteUserByEmail`) exige a `service_role` key do Supabase —
-uma chave que **nunca** pode ir pro bundle do cliente (ela ignora RLS por
-completo). A função roda no servidor (Deno, hospedado no próprio Supabase),
-recebe o pedido do painel, confirma que quem está chamando é admin (lendo
-`profiles` com o JWT de quem chamou, antes de usar a service role pra
-qualquer coisa) e só então executa a ação.
+Aba **Administração → Barbeiros**: cadastra um barbeiro por email e marca
+quais lojas ele acessa; lista os barbeiros existentes com opção de editar
+o acesso depois. Isso **precisa** de uma Edge Function
+(`supabase/functions/admin-barbers`), porque criar usuário exige a
+`service_role` key do Supabase — uma chave que **nunca** pode ir pro
+bundle do cliente (ela ignora RLS por completo). A função roda no
+servidor (Deno, hospedado no próprio Supabase), recebe o pedido do
+painel, confirma que quem está chamando é admin (lendo `profiles` com o
+JWT de quem chamou, antes de usar a service role pra qualquer coisa) e só
+então executa a ação.
 
 **Passos manuais — publicar a Edge Function** (precisa da Supabase CLI e
 não pode ser feito por este squad, que não tem acesso ao projeto Supabase):
@@ -240,8 +240,35 @@ supabase secrets set SUPABASE_SERVICE_ROLE_KEY=<a service_role key do projeto>
 dentro da função; só a `SUPABASE_SERVICE_ROLE_KEY` precisa ser configurada
 como secret à mão (Project Settings → API → `service_role` no Dashboard, ou
 `supabase secrets set`). Até isso ser feito, o painel de Lojas funciona
-normalmente, mas o painel de Barbeiros mostra erro ao tentar convidar ou
+normalmente, mas o painel de Barbeiros mostra erro ao tentar cadastrar ou
 listar — sem quebrar o resto do app.
+
+### Cadastro com senha temporária (H10)
+
+O cadastro original do H8 convidava por email (`auth.admin.inviteUserByEmail`)
+— o barbeiro definia a própria senha, mas dependia do envio de email
+funcionar no projeto Supabase (o provedor padrão tem limite baixo, e a
+squad não tem como testar/configurar isso). O H10 troca esse fluxo: a
+Edge Function agora cria a conta já com uma **senha temporária gerada no
+servidor** (`auth.admin.createUser`, sem depender de email), e devolve
+essa senha pro admin **uma única vez**, na hora do cadastro — a tela
+mostra a senha com um botão de copiar, e avisa que ela não aparece de
+novo depois de fechar. O admin repassa essa senha ao barbeiro por fora
+(WhatsApp, verbalmente etc.).
+
+No primeiro login, o barbeiro é obrigado a trocar essa senha antes de ver
+qualquer coisa do dashboard — a tela de "Trocar senha"
+(`components/ChangePassword.tsx`) bloqueia o resto do app até isso
+acontecer. Isso é controlado por uma coluna nova,
+`profiles.must_change_password` (migration
+`supabase/migrations/005_must_change_password.sql`), que começa `true`
+só pra contas criadas a partir de agora pelo painel — quem já tinha
+conta antes do H10 (incluindo o admin do bootstrap) não é afetado.
+
+**Passo manual — aplicar a migration**: copie o conteúdo de
+`005_must_change_password.sql` no SQL Editor do Supabase. Pode rodar a
+qualquer momento depois da migration 003 (não depende da 004). É
+aditiva — só adiciona uma coluna e zera a flag pra quem já existe hoje.
 
 ### Restrição de acesso por loja (H9)
 
@@ -266,7 +293,7 @@ sem enxergar nada assim que a policy nova entrar em vigor. Ordem
 obrigatória antes de rodar:
 
 1. Migration 003 já aplicada, com o bootstrap do primeiro admin feito.
-2. Todo barbeiro que hoje usa o painel já foi convidado e já tem pelo
+2. Todo barbeiro que hoje usa o painel já foi cadastrado e já tem pelo
    menos uma loja liberada (Administração → Barbeiros → Editar acesso).
 3. Login testado em produção e equipe avisada (mesma ordem de sempre).
 4. Rodar a query de verificação do arquivo da migration — resultado tem
@@ -283,19 +310,20 @@ exige autenticação por si só (além de exigir a loja certa).
 ```
 src/
   components/     # UI (Header, Login, StoreSelector, DataEntry, Reports, AIInsights)
+  components/ChangePassword.tsx # troca de senha obrigatória (H10)
   components/Admin/   # painéis de Lojas e Barbeiros (H7/H8)
   hooks/useBarberData.ts # carrega/salva dados por loja
   hooks/useStores.ts     # carrega TODAS as lojas (usado só no painel de admin)
   hooks/useAccessibleStores.ts # lojas que O USUÁRIO ATUAL pode acessar (H9)
-  hooks/useUserRole.ts   # resolve role (admin/barbeiro) da sessão logada
+  hooks/useUserRole.ts   # resolve role + must_change_password da sessão logada (H10)
   lib/supabase.ts # client Supabase + helpers de auth + flag isAuthRequired (VITE_REQUIRE_AUTH)
   lib/stores.ts        # CRUD de lojas + fetchAccessibleStores (H6/H9)
-  lib/profile.ts        # busca role do usuário logado
+  lib/profile.ts        # busca role + must_change_password do usuário logado
   lib/adminApi.ts        # chamadas pra Edge Function admin-barbers
   utils/          # storage (local/Supabase), analytics, insights
   types/          # tipos compartilhados
 supabase/
   schema.sql      # schema atual (RLS permissivo — ver nota acima)
   migrations/          # alterações incrementais de schema/policies
-  functions/admin-barbers/ # Edge Function (Deno) — convite/gestão de barbeiros
+  functions/admin-barbers/ # Edge Function (Deno) — cadastro/gestão de barbeiros
 ```

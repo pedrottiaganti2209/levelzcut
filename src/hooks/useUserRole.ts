@@ -1,28 +1,33 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { fetchMyRole, type UserRole } from '../lib/profile';
+import { fetchMyRole, fetchMustChangePassword, type UserRole } from '../lib/profile';
 
 /**
- * Papel do usuário logado (admin | barbeiro), derivado da tabela `profiles`.
- * Recebe a sessão de fora (já é rastreada em App.tsx) em vez de duplicar
- * esse controle aqui. `loading` fica true entre a sessão existir e o papel
- * ter sido resolvido — usado pra não piscar a aba de admin antes da hora.
+ * Papel do usuário logado (admin | barbeiro) e se precisa trocar a senha
+ * temporária (H10), derivados da tabela `profiles`. Recebe a sessão de
+ * fora (já é rastreada em App.tsx) em vez de duplicar esse controle aqui.
+ * `loading` fica true entre a sessão existir e essas informações terem
+ * sido resolvidas — App.tsx usa isso pra não deixar o dashboard piscar
+ * antes de saber se precisa mostrar a tela de trocar senha.
  */
 export function useUserRole(session: Session | null) {
   const [role, setRole] = useState<UserRole>('barbeiro');
+  const [mustChangePassword, setMustChangePassword] = useState(false);
   const [loading, setLoading] = useState(!!session);
 
   useEffect(() => {
     if (!session) {
       setRole('barbeiro');
+      setMustChangePassword(false);
       setLoading(false);
       return;
     }
     let cancelled = false;
     setLoading(true);
-    fetchMyRole(session.user.id).then((r) => {
+    Promise.all([fetchMyRole(session.user.id), fetchMustChangePassword(session.user.id)]).then(([r, mcp]) => {
       if (!cancelled) {
         setRole(r);
+        setMustChangePassword(mcp);
         setLoading(false);
       }
     });
@@ -31,5 +36,12 @@ export function useUserRole(session: Session | null) {
     };
   }, [session]);
 
-  return { role, isAdmin: role === 'admin', loading };
+  // Chamado depois que a senha já foi trocada com sucesso no servidor —
+  // evita ter que buscar tudo de novo só pra saber o que a gente mesmo
+  // acabou de confirmar.
+  const markPasswordChanged = useCallback(() => {
+    setMustChangePassword(false);
+  }, []);
+
+  return { role, isAdmin: role === 'admin', mustChangePassword, loading, markPasswordChanged };
 }

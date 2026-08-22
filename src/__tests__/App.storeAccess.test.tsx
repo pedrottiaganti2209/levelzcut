@@ -48,6 +48,7 @@ describe('App — acesso a lojas por barbeiro (H9)', () => {
     mockAuthenticated('barber-sem-acesso');
     vi.doMock('../lib/profile', () => ({
       fetchMyRole: vi.fn().mockResolvedValue('barbeiro'),
+      fetchMustChangePassword: vi.fn().mockResolvedValue(false),
     }));
     vi.doMock('../lib/stores', async () => {
       const actual = await vi.importActual<typeof import('../lib/stores')>('../lib/stores');
@@ -70,6 +71,7 @@ describe('App — acesso a lojas por barbeiro (H9)', () => {
     mockAuthenticated('barber-vila');
     vi.doMock('../lib/profile', () => ({
       fetchMyRole: vi.fn().mockResolvedValue('barbeiro'),
+      fetchMustChangePassword: vi.fn().mockResolvedValue(false),
     }));
     vi.doMock('../lib/stores', async () => {
       const actual = await vi.importActual<typeof import('../lib/stores')>('../lib/stores');
@@ -93,6 +95,7 @@ describe('App — acesso a lojas por barbeiro (H9)', () => {
     mockAuthenticated('admin-user');
     vi.doMock('../lib/profile', () => ({
       fetchMyRole: vi.fn().mockResolvedValue('admin'),
+      fetchMustChangePassword: vi.fn().mockResolvedValue(false),
     }));
     vi.doMock('../lib/stores', async () => {
       const actual = await vi.importActual<typeof import('../lib/stores')>('../lib/stores');

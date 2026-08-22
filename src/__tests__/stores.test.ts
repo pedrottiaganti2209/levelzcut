@@ -36,3 +36,21 @@ describe('fetchStores — fallback quando Supabase não está configurado', () =
     expect(result).toEqual(STORES);
   });
 });
+
+describe('fetchAccessibleStores — fallback quando Supabase não está configurado (H9)', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it('retorna o array fixo de lojas quando não há Supabase configurado', async () => {
+    vi.stubEnv('VITE_SUPABASE_URL', undefined);
+    vi.stubEnv('VITE_SUPABASE_ANON_KEY', undefined);
+
+    const { fetchAccessibleStores } = await import('../lib/stores');
+    const { STORES } = await import('../types');
+
+    const result = await fetchAccessibleStores('any-user-id');
+    expect(result).toEqual(STORES);
+  });
+});

@@ -141,7 +141,7 @@ Isso é uma conta pessoal/da organização no UptimeRobot — a squad não tem
 esse acesso, então essa configuração é sempre um passo manual de quem tem
 a conta.
 
-## Administração: lojas e barbeiros (H6, H7, H8)
+## Administração: lojas e barbeiros (H6–H9)
 
 Jornada do dono da barbearia: um admin loga, cadastra lojas (hoje só existe
 "Moema", mas o modelo já suporta várias) e convida barbeiros, escolhendo a
@@ -243,16 +243,40 @@ como secret à mão (Project Settings → API → `service_role` no Dashboard, o
 normalmente, mas o painel de Barbeiros mostra erro ao tentar convidar ou
 listar — sem quebrar o resto do app.
 
-### O que ainda falta (H9, propositalmente fora deste escopo)
+### Restrição de acesso por loja (H9)
 
-Hoje o cadastro de `barber_stores` já existe, mas **ainda não é aplicado**
-como restrição real: um barbeiro autenticado ainda consegue ver dados de
-qualquer loja em `cuts_data`, porque a policy de RLS dessa tabela não foi
-alterada para checar `barber_stores`. Isso é a próxima história (H9),
-combinada para rodar depois, separadamente — dá pra cadastrar loja e
-convidar barbeiro hoje sem esse risco, porque tudo isso já fica atrás da
-flag de login (que segue desligada em produção até ser deliberadamente
-ativada).
+Até aqui, `barber_stores` só guardava o vínculo — qualquer barbeiro
+autenticado ainda conseguia ler/escrever dados de qualquer loja em
+`cuts_data`. O H9 fecha essa lacuna: a migration
+`supabase/migrations/004_barber_store_access_restriction.sql` troca a
+policy de RLS de `cuts_data` por uma que só libera acesso pra admin, ou
+pra barbeiro com aquela loja especificamente liberada em `barber_stores`.
+
+No cliente, o seletor de loja no topo do app (`hooks/useAccessibleStores.ts`)
+passa a refletir isso: com a flag de login desligada, ou pra admin, mostra
+todas as lojas (igual sempre foi); pra barbeiro autenticado, mostra só as
+lojas vinculadas a ele. Se um barbeiro ainda não tiver nenhuma loja
+liberada, o app mostra um aviso claro em vez de um dashboard vazio.
+
+**Esta é a migration mais sensível do projeto até agora** — ela restringe
+acesso aos dados reais de faturamento. O arquivo da migration documenta
+uma query de verificação pra rodar **antes** de aplicar: ela lista qualquer
+usuário não-admin sem nenhuma loja liberada, porque essa pessoa ficaria
+sem enxergar nada assim que a policy nova entrar em vigor. Ordem
+obrigatória antes de rodar:
+
+1. Migration 003 já aplicada, com o bootstrap do primeiro admin feito.
+2. Todo barbeiro que hoje usa o painel já foi convidado e já tem pelo
+   menos uma loja liberada (Administração → Barbeiros → Editar acesso).
+3. Login testado em produção e equipe avisada (mesma ordem de sempre).
+4. Rodar a query de verificação do arquivo da migration — resultado tem
+   que vir vazio.
+
+Só então rode `004_barber_store_access_restriction.sql` no SQL Editor.
+Ela funciona independente da migration `002_require_auth.sql` já ter sido
+aplicada ou não (remove qualquer uma das duas policies anteriores de
+`cuts_data`) — na prática, torna a 002 dispensável, porque a policy nova já
+exige autenticação por si só (além de exigir a loja certa).
 
 ## Estrutura do projeto
 
@@ -261,10 +285,11 @@ src/
   components/     # UI (Header, Login, StoreSelector, DataEntry, Reports, AIInsights)
   components/Admin/   # painéis de Lojas e Barbeiros (H7/H8)
   hooks/useBarberData.ts # carrega/salva dados por loja
-  hooks/useStores.ts     # carrega lojas (Supabase ou fallback fixo)
+  hooks/useStores.ts     # carrega TODAS as lojas (usado só no painel de admin)
+  hooks/useAccessibleStores.ts # lojas que O USUÁRIO ATUAL pode acessar (H9)
   hooks/useUserRole.ts   # resolve role (admin/barbeiro) da sessão logada
-  lib/supabase.ts # client Supabase + helpers de auth + flag VITE_REQUIRE_AUTH
-  lib/stores.ts        # CRUD de lojas
+  lib/supabase.ts # client Supabase + helpers de auth + flag isAuthRequired (VITE_REQUIRE_AUTH)
+  lib/stores.ts        # CRUD de lojas + fetchAccessibleStores (H6/H9)
   lib/profile.ts        # busca role do usuário logado
   lib/adminApi.ts        # chamadas pra Edge Function admin-barbers
   utils/          # storage (local/Supabase), analytics, insights

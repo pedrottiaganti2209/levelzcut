@@ -6,7 +6,10 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  // supabase/functions roda em Deno (Edge Functions), não no navegador —
+  // tem globals diferentes (Deno.*, imports npm:/https:) e não faz parte
+  // do bundle do Vite, então fica fora do lint do app.
+  globalIgnores(['dist', 'supabase/functions']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [

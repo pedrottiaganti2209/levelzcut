@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Users, UserPlus, RefreshCw, Copy, Check } from 'lucide-react';
+import { Users, UserPlus, RefreshCw, Copy, Check, Trash2 } from 'lucide-react';
 import { useStores } from '../../hooks/useStores';
-import { listBarbers, createBarber, updateBarberAccess, type Barber } from '../../lib/adminApi';
+import { listBarbers, createBarber, updateBarberAccess, deleteBarber, type Barber } from '../../lib/adminApi';
 
 export function BarbersPanel() {
   const { stores } = useStores();
@@ -22,6 +22,10 @@ export function BarbersPanel() {
 
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editingStores, setEditingStores] = useState<string[]>([]);
+
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const reload = async () => {
     setLoading(true);
@@ -95,6 +99,19 @@ export function BarbersPanel() {
     reload();
   };
 
+  const handleDelete = async (userId: string) => {
+    setDeleteError(null);
+    setDeletingId(userId);
+    const { error } = await deleteBarber(userId);
+    setDeletingId(null);
+    if (error) {
+      setDeleteError(error);
+      return;
+    }
+    setConfirmingDeleteId(null);
+    reload();
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -117,6 +134,12 @@ export function BarbersPanel() {
       {loadError && (
         <p className="text-sm text-red-500" role="alert">
           {loadError}
+        </p>
+      )}
+
+      {deleteError && (
+        <p className="text-sm text-red-500" role="alert">
+          {deleteError}
         </p>
       )}
 
@@ -218,15 +241,48 @@ export function BarbersPanel() {
                   })}
                 </div>
               </div>
-              {editingUserId !== barber.userId && (
-                <button
-                  onClick={() => startEditing(barber)}
-                  className="text-xs text-gray-400 hover:text-yellow-500 transition-colors uppercase tracking-wider"
-                >
-                  Editar acesso
-                </button>
+              {editingUserId !== barber.userId && confirmingDeleteId !== barber.userId && (
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => startEditing(barber)}
+                    className="text-xs text-gray-400 hover:text-yellow-500 transition-colors uppercase tracking-wider"
+                  >
+                    Editar acesso
+                  </button>
+                  <button
+                    onClick={() => setConfirmingDeleteId(barber.userId)}
+                    className="text-gray-500 hover:text-red-500 transition-colors"
+                    title="Apagar barbeiro"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               )}
             </div>
+
+            {confirmingDeleteId === barber.userId && (
+              <div className="mt-3 pt-3 border-t border-gray-800 space-y-2">
+                <p className="text-xs text-gray-400">
+                  Apagar a conta de <span className="text-white">{barber.email}</span>? Ele perde o acesso ao
+                  login imediatamente. Os cortes já lançados por ele não são apagados.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleDelete(barber.userId)}
+                    disabled={deletingId === barber.userId}
+                    className="bg-red-700 text-white text-xs font-medium rounded px-3 py-1.5 uppercase tracking-wider hover:bg-red-600 transition-colors disabled:opacity-50"
+                  >
+                    {deletingId === barber.userId ? 'Apagando...' : 'Confirmar exclusão'}
+                  </button>
+                  <button
+                    onClick={() => setConfirmingDeleteId(null)}
+                    className="text-xs text-gray-400 hover:text-gray-200 transition-colors uppercase tracking-wider px-3 py-1.5"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
 
             {editingUserId === barber.userId && (
               <div className="mt-3 pt-3 border-t border-gray-800 space-y-2">

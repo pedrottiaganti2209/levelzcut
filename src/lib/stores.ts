@@ -90,6 +90,23 @@ export async function updateStore(
   return { error: error ? new Error(error.message) : null };
 }
 
+/**
+ * Apaga a loja. Não apaga nenhuma linha de `cuts_data` (a coluna
+ * `store_id` de lá não tem FK pra `stores` — é assim desde o schema
+ * original, antes desta tabela existir). O que some de verdade é o
+ * vínculo em `barber_stores` (FK com ON DELETE CASCADE, migration 003) —
+ * ou seja, todo barbeiro perde o acesso a essa loja junto. Dados
+ * históricos de faturamento ficam órfãos no banco (não aparecem mais em
+ * nenhum seletor), mas não são apagados; recriar uma loja com o mesmo
+ * `id` os traz de volta.
+ */
+export async function deleteStore(id: string): Promise<{ error: Error | null }> {
+  if (!supabase) return { error: new Error('Supabase não está configurado.') };
+  const { error } = await supabase.from('stores').delete().eq('id', id);
+  if (error) reportError(error, 'stores.deleteStore');
+  return { error: error ? new Error(error.message) : null };
+}
+
 /** Gera um id de loja (slug) a partir do nome — usado como sugestão no formulário, sempre editável. */
 const DIACRITIC_MARKS = /[̀-ͯ]/g;
 

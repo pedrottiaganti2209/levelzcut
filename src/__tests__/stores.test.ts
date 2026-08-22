@@ -54,3 +54,19 @@ describe('fetchAccessibleStores — fallback quando Supabase não está configur
     expect(result).toEqual(STORES);
   });
 });
+
+describe('deleteStore — sem Supabase configurado', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it('retorna erro em vez de tentar apagar', async () => {
+    vi.stubEnv('VITE_SUPABASE_URL', undefined);
+    vi.stubEnv('VITE_SUPABASE_ANON_KEY', undefined);
+
+    const { deleteStore } = await import('../lib/stores');
+    const { error } = await deleteStore('moema');
+    expect(error).not.toBeNull();
+  });
+});

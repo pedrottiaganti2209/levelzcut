@@ -292,6 +292,37 @@ escolhidos, e o código da função lê exatamente esses nomes. Até isso ser
 feito, o painel de Lojas funciona normalmente, mas o painel de Barbeiros
 mostra erro ao tentar cadastrar ou listar — sem quebrar o resto do app.
 
+### Apagar lojas e barbeiros
+
+O painel de Lojas e o de Barbeiros têm um botão de apagar (ícone de
+lixeira), com uma confirmação inline antes de executar — sem modal de
+navegador (`window.confirm`), pra ficar consistente com o resto do app.
+
+- **Apagar loja**: não passa pela Edge Function — a policy de RLS de
+  `stores` (migration 003) já libera `DELETE` pra quem é admin, então é
+  uma chamada direta ao Supabase (`lib/stores.ts#deleteStore`). Como
+  `barber_stores.store_id` tem `ON DELETE CASCADE` pra `stores`, os
+  vínculos de acesso dos barbeiros àquela loja somem junto. `cuts_data`
+  **não** é afetada — a coluna `store_id` de lá nunca teve FK pra `stores`
+  (schema original, anterior à migration 003) — os dados de faturamento
+  já lançados continuam no banco, só deixam de aparecer nos seletores até
+  alguém recriar uma loja com o mesmo `id`.
+- **Apagar barbeiro**: precisa da service role (apagar um usuário do
+  Supabase Auth), então passa pela Edge Function `admin-barbers`, ação
+  `delete_barber` — igual às outras ações administrativas, exige que quem
+  chamou seja admin, e adicionalmente recusa se `userId` for o próprio
+  `callerId` (evita um admin se trancar fora do painel sem querer).
+  `profiles` e `barber_stores` também têm `ON DELETE CASCADE` pra
+  `auth.users`, então apagar o usuário já limpa as duas tabelas — não
+  precisa apagar cada uma à parte.
+
+**Passo manual — publicar de novo a Edge Function**: como qualquer mudança
+em `supabase/functions/admin-barbers/index.ts`, a ação `delete_barber` só
+existe em produção depois de rodar de novo o deploy (CLI ou Dashboard —
+ver "Passos manuais — publicar a Edge Function" acima). Sem isso, o botão
+de apagar barbeiro aparece na tela mas a chamada volta com "Ação
+desconhecida."
+
 ### Cadastro com senha temporária (H10)
 
 O cadastro original do H8 convidava por email (`auth.admin.inviteUserByEmail`)

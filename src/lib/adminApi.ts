@@ -48,6 +48,11 @@ export function updateBarberAccess(userId: string, storeIds: string[]) {
   return invoke<{ ok: true }>('update_access', { userId, storeIds });
 }
 
+/** Apaga a conta do barbeiro (Supabase Auth) — a função no servidor recusa se for a própria conta de quem chamou. */
+export function deleteBarber(userId: string) {
+  return invoke<{ ok: true }>('delete_barber', { userId });
+}
+
 /**
  * Chamado pelo próprio barbeiro (não precisa ser admin) depois de trocar
  * a senha temporária — limpa a flag `must_change_password` da própria

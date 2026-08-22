@@ -124,6 +124,24 @@ async function createBarber(
   return { userId, email, tempPassword };
 }
 
+async function deleteBarber(
+  adminClient: ReturnType<typeof createClient>,
+  callerId: string,
+  userId: string
+): Promise<{ ok: true }> {
+  if (!userId) throw new Error('userId é obrigatório.');
+  // Bloqueia auto-exclusão: um admin apagando a própria conta por engano
+  // ficaria trancado pra fora do painel sem ninguém pra reverter (a não
+  // ser voltando pro SQL Editor do Supabase). `profiles`/`barber_stores`
+  // têm ON DELETE CASCADE pra auth.users, então apagar o usuário aqui já
+  // limpa as duas tabelas junto — não precisa apagar cada uma à parte.
+  if (userId === callerId) throw new Error('Você não pode apagar a própria conta.');
+
+  const { error } = await adminClient.auth.admin.deleteUser(userId);
+  if (error) throw error;
+  return { ok: true };
+}
+
 async function completePasswordSetup(
   adminClient: ReturnType<typeof createClient>,
   callerId: string
@@ -215,6 +233,8 @@ Deno.serve(async (req: Request) => {
         return json(await createBarber(adminClient, body.email, body.storeIds ?? []));
       case 'update_access':
         return json(await updateAccess(adminClient, body.userId, body.storeIds ?? []));
+      case 'delete_barber':
+        return json(await deleteBarber(adminClient, user.id, body.userId));
       default:
         return json({ error: 'Ação desconhecida.' }, 400);
     }

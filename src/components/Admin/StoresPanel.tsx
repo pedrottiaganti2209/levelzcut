@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
-import { Store as StoreIcon, Plus, RefreshCw } from 'lucide-react';
+import { Store as StoreIcon, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { useStores } from '../../hooks/useStores';
-import { createStore, slugifyStoreId } from '../../lib/stores';
+import { createStore, deleteStore, slugifyStoreId } from '../../lib/stores';
 
 export function StoresPanel() {
   const { stores, loading, reload } = useStores();
@@ -11,6 +11,23 @@ export function StoresPanel() {
   const [idTouched, setIdTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleDelete = async (storeId: string) => {
+    setDeleteError(null);
+    setDeletingId(storeId);
+    const { error: deleteErr } = await deleteStore(storeId);
+    setDeletingId(null);
+    if (deleteErr) {
+      setDeleteError(deleteErr.message);
+      return;
+    }
+    setConfirmingId(null);
+    reload();
+  };
 
   const handleNameChange = (value: string) => {
     setName(value);
@@ -105,16 +122,55 @@ export function StoresPanel() {
         </form>
       )}
 
+      {deleteError && (
+        <p className="text-sm text-red-500" role="alert">
+          {deleteError}
+        </p>
+      )}
+
       <div className="space-y-2">
         {stores.map((store) => (
-          <div
-            key={store.id}
-            className="bg-gray-900 border border-gray-800 rounded-lg p-3 flex items-center justify-between"
-          >
-            <div>
-              <div className="text-sm text-white font-medium">{store.displayName}</div>
-              <div className="text-xs text-gray-500">{store.id}</div>
+          <div key={store.id} className="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm text-white font-medium">{store.displayName}</div>
+                <div className="text-xs text-gray-500">{store.id}</div>
+              </div>
+              {confirmingId !== store.id && (
+                <button
+                  onClick={() => setConfirmingId(store.id)}
+                  className="text-gray-500 hover:text-red-500 transition-colors"
+                  title="Apagar loja"
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
             </div>
+
+            {confirmingId === store.id && (
+              <div className="mt-3 pt-3 border-t border-gray-800 space-y-2">
+                <p className="text-xs text-gray-400">
+                  Apagar <span className="text-white">{store.displayName}</span>? Os barbeiros perdem o acesso
+                  liberado a essa loja. Dados de faturamento já lançados não são apagados, só deixam de aparecer
+                  nos seletores.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleDelete(store.id)}
+                    disabled={deletingId === store.id}
+                    className="bg-red-700 text-white text-xs font-medium rounded px-3 py-1.5 uppercase tracking-wider hover:bg-red-600 transition-colors disabled:opacity-50"
+                  >
+                    {deletingId === store.id ? 'Apagando...' : 'Confirmar exclusão'}
+                  </button>
+                  <button
+                    onClick={() => setConfirmingId(null)}
+                    className="text-xs text-gray-400 hover:text-gray-200 transition-colors uppercase tracking-wider px-3 py-1.5"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>

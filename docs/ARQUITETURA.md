@@ -1,6 +1,6 @@
 # LevelzCut — Documentação Técnica
 
-Estado do sistema em 2026-08-22, ao final das histórias H1–H10 do backlog
+Estado do sistema em 2026-08-22, ao final das histórias H1–H11 do backlog
 de hardening. Este documento é para quem for dar manutenção no código
 depois —
 descreve arquitetura, modelo de dados, autenticação/autorização, feature
@@ -13,6 +13,11 @@ barbearias. Hoje em produção real, usado diariamente pela equipe pra lançar
 cortes (diários/mensais) por loja e visualizar relatórios/insights. É um
 app **estático** — sem servidor próprio, todo o "backend" é Supabase
 (Postgres + Auth + Edge Functions) acessado direto do browser.
+
+Desde o H11, "LevelzCut" não é mais um único app: é **dois** apps
+estáticos publicados separadamente a partir do mesmo repositório e
+compartilhando o mesmo projeto Supabase — o app de barbeiro (Relatórios,
+Lançar Dados) e o app de administração (Lojas, Barbeiros). Ver seção 5.6.
 
 **Regra de ouro do projeto**: o painel já está em uso real. Nenhuma mudança
 pode alterar a experiência de quem já usa o dashboard sem aviso prévio e
@@ -39,33 +44,42 @@ os dados reais de produção estão no Supabase.
 
 ## 3. Arquitetura de código
 
+Dois pontos de entrada Vite, um `src/` compartilhado (H11 — ver seção 5.6):
+
 ```
+index.html               # entrada do app de barbeiro (build padrão, sem mudança)
+admin.html                # entrada do app de administração (H11)
+vite.config.ts             # build do app de barbeiro
+vite.config.admin.ts        # build do app de administração — outDir dist-admin (H11)
 src/
-  App.tsx                 # composição raiz: sessão, abas, gates de feature
+  App.tsx                 # app de barbeiro: sessão, abas (Relatórios/Lançar Dados), gates de feature
+  AdminApp.tsx              # app de administração (H11): sessão, gate de role, painel de Lojas/Barbeiros
+  main.tsx                   # entry do app de barbeiro
+  main.admin.tsx               # entry do app de administração (H11)
   components/
-    Header.tsx, Login.tsx, StoreSelector.tsx
-    ChangePassword.tsx        # troca de senha obrigatória (H10)
-    DataEntry/             # lançamento de cortes (diário/mensal)
-    Reports/                # relatórios, gráficos, tabela mensal
-    AIInsights.tsx           # insights derivados dos dados
-    Admin/                    # painel de administração (H6–H8, H10)
+    Header.tsx, Login.tsx, StoreSelector.tsx    # compartilhados pelos dois apps
+    ChangePassword.tsx        # troca de senha obrigatória (H10) — só o app de barbeiro monta isso
+    DataEntry/             # lançamento de cortes (diário/mensal) — só app de barbeiro
+    Reports/                # relatórios, gráficos, tabela mensal — só app de barbeiro
+    AIInsights.tsx           # insights derivados dos dados — só app de barbeiro
+    Admin/                    # painel de administração (H6–H8, H10) — só o AdminApp importa isto
       index.tsx                 # sub-tabs Lojas / Barbeiros
       StoresPanel.tsx            # cadastro de lojas
       BarbersPanel.tsx            # cadastro (senha temporária) + gestão de acesso
   hooks/
-    useBarberData.ts        # carrega/salva dados de faturamento por loja
-    useStores.ts              # carrega TODAS as lojas (só usado no painel de admin, H6)
-    useAccessibleStores.ts      # lojas que O USUÁRIO ATUAL pode acessar (H9)
-    useUserRole.ts                # resolve role + must_change_password (H6, H10)
+    useBarberData.ts        # carrega/salva dados de faturamento por loja (app de barbeiro)
+    useStores.ts              # carrega TODAS as lojas (só usado no app de administração)
+    useAccessibleStores.ts      # lojas que O USUÁRIO ATUAL pode acessar (H9, app de barbeiro)
+    useUserRole.ts                # resolve role + must_change_password (H6, H10) — usado pelos dois apps
   lib/
-    supabase.ts              # client Supabase + helpers de auth + flag isAuthRequired (VITE_REQUIRE_AUTH)
-    sentry.ts                    # init + reportError, atrás de VITE_SENTRY_DSN
+    supabase.ts              # client Supabase + helpers de auth + flag isAuthRequired (VITE_REQUIRE_AUTH) — compartilhado
+    sentry.ts                    # init + reportError, atrás de VITE_SENTRY_DSN — compartilhado
     stores.ts                     # CRUD de lojas + fetchAccessibleStores (H6/H9)
     profile.ts                      # fetchMyRole + fetchMustChangePassword (H6, H10)
-    adminApi.ts                       # chamadas à Edge Function admin-barbers (H8, H10)
+    adminApi.ts                       # chamadas à Edge Function admin-barbers (H8, H10) — só AdminApp
   utils/
-    storage.ts               # persistência local/Supabase de cuts_data
-    analytics.ts, insights.ts  # cálculos derivados
+    storage.ts               # persistência local/Supabase de cuts_data (app de barbeiro)
+    analytics.ts, insights.ts  # cálculos derivados (app de barbeiro)
   types/                    # tipos compartilhados (Store, StoreData, ...)
 supabase/
   schema.sql                # schema original (não editar)
@@ -77,6 +91,13 @@ supabase/
   functions/
     admin-barbers/              # Edge Function (Deno) — cadastro/gestão de barbeiros (H8, H10)
 ```
+
+Não é preciso mover nenhum arquivo pra uma pasta "admin" separada pra
+garantir que o bundle do app de barbeiro não carregue código de
+administração (ou vice-versa): cada bundle só inclui o que o seu próprio
+`App`/`AdminApp` importa, transitivamente — o Rollup (via Vite) resolve
+isso pela árvore de imports de cada entry point, não pela localização física
+dos arquivos.
 
 Nenhuma migration roda automaticamente contra o Supabase real — todas
 exigem copiar o SQL e rodar manualmente no SQL Editor, deliberadamente,
@@ -143,14 +164,18 @@ checagem usa `is_admin(uid uuid) RETURNS boolean SECURITY DEFINER SET
 search_path = public` — roda com privilégios da função, não do usuário
 chamador, então não reaciona a própria RLS que está avaliando.
 
-Gate de UI: a aba "Administração" em `App.tsx` só renderiza quando
-`isAuthRequired && isAdmin` — ambas as condições precisam ser verdadeiras.
-`isAdmin` vem de `useUserRole(session)`, que por sua vez usa
-`fetchMyRole()` (`lib/profile.ts`), que **nunca assume admin por
-omissão**: qualquer situação incerta (sem Supabase configurado, sem
+Gate de UI (revisado no H11 — ver seção 5.6): até o H10, isso era uma aba
+condicional dentro do mesmo `App.tsx`, controlada por `showAdminTab =
+isAuthRequired && isAdmin`. Desde o H11, administração é o `AdminApp.tsx`
+separado — não existe mais aba nenhuma pra mostrar/esconder em `App.tsx`,
+o código simplesmente não está lá. `AdminApp.tsx` exige login
+incondicionalmente e só passa da tela de login pro painel quando `isAdmin`
+é `true`. `isAdmin` vem de `useUserRole(session)` nos dois apps, que por
+sua vez usa `fetchMyRole()` (`lib/profile.ts`), que **nunca assume admin
+por omissão**: qualquer situação incerta (sem Supabase configurado, sem
 sessão, erro de rede, sem linha em `profiles`) resolve pra `'barbeiro'`.
 Isso é testado explicitamente (`__tests__/profile.test.ts`,
-`__tests__/App.adminTab.test.tsx`).
+`__tests__/AdminApp.test.tsx`, `__tests__/App.noAdmin.test.tsx`).
 
 ### 5.3 Restrição de acesso por loja (H9)
 
@@ -244,6 +269,46 @@ migration zera a flag pra todo mundo que já tinha `profiles` na hora em
 que ela roda; só contas criadas depois, via `create_barber`, nascem com
 a flag ligada de propósito.
 
+### 5.6 Dois apps, duas URLs (H11)
+
+Até o H10, administração era uma aba a mais dentro do mesmo bundle que os
+barbeiros usam (escondida por `showAdminTab`, mas presente no JS baixado
+por qualquer um). O H11 separa isso em dois apps publicados
+independentemente, cada um com sua própria URL/serviço Render:
+
+| | App de barbeiro | App de administração |
+|---|---|---|
+| Entry | `index.html` → `src/main.tsx` → `App.tsx` | `admin.html` → `src/main.admin.tsx` → `AdminApp.tsx` |
+| Build | `npm run build` (sem mudança) | `npm run build:admin` (novo, H11) |
+| Conteúdo | Relatórios, Lançar Dados | Lojas, Barbeiros |
+| Gate de login | Atrás de `VITE_REQUIRE_AUTH` (`isAuthRequired`) — igual sempre foi | **Sempre exigido**, incondicional — não lê `VITE_REQUIRE_AUTH` |
+| Deploy | Serviço Render `levelzcut` (já existia) | Serviço Render `levelzcut-admin` (novo, `render.yaml`) |
+
+A diferença mais importante de arquitetura é a do login: o app de barbeiro
+mantém a mesma doutrina de sempre (flag desligada = comportamento de hoje,
+inalterado). Já o app de administração **não tem uma versão "sem login"**
+— não faria sentido ter, dado que ele só existe pra fazer operações que já
+exigem ser admin. Publicar esse app como um serviço à parte é, em si, o
+passo deliberado de ativação (a doutrina de "nada muda sem ativação
+explícita" continua valendo — só que a ativação aqui é "o serviço existe e
+tem uma URL", não uma variável de ambiente).
+
+Bundle: o app de barbeiro (~582 kB) não importa nada de
+`components/Admin/`, `lib/adminApi.ts` nem `hooks/useStores.ts`; o app de
+administração (~195 kB) não importa `components/DataEntry/`,
+`components/Reports/`, `components/AIInsights.tsx`, `hooks/useBarberData.ts`
+nem `utils/analytics.ts`/`insights.ts`. Isso não é enforcement manual —
+é consequência direta de cada entry point (`App.tsx` / `AdminApp.tsx`) só
+importar o que usa; o bundler resolve o resto sozinho.
+
+**O que NÃO muda**: a segurança real continua sendo a RLS do banco (seção
+5.3) e a Edge Function reconfirmando o papel de quem chama (seção 5.4) —
+isso já valia antes do H11 e continua valendo depois, independente de qual
+app foi usado pra fazer a chamada. Separar os apps é uma melhoria de
+clareza de produto/UX (o barbeiro nunca vê nem baixa código de
+administração) e reduz a superfície de cada bundle — não é, por si só, uma
+nova camada de proteção.
+
 ## 6. CI (H3)
 
 GitHub Actions (`.github/workflows/ci.yml`) roda em todo push/PR:
@@ -268,15 +333,25 @@ build`. Não faz deploy — é só gate de qualidade antes do merge.
   round (todos `@typescript-eslint/no-explicit-any` em código de
   gráficos/storage, mais um `react-hooks/set-state-in-effect` em
   `useBarberData.ts`). H6 introduziu mais 2 erros do mesmo tipo
-  (`useStores.ts`, `useUserRole.ts`) e H9 mais 1
-  (`useAccessibleStores.ts`) — total de 12, todos o mesmo padrão já
-  aceito no código existente (chamar uma função que atualiza estado
-  dentro de um `useEffect` de "carregar uma vez"). H10 não introduziu
-  nenhum erro novo (a mudança em `useUserRole.ts` reaproveita o mesmo
-  efeito já contado). Não é regressão de comportamento (zero falha de
-  teste/build), mas é uma refatoração pendente: nenhum desses hooks usa
-  o padrão mais novo recomendado pelo eslint-plugin-react-hooks pra
-  evitar o warning.
+  (`useStores.ts`, `useUserRole.ts`), H9 mais 1
+  (`useAccessibleStores.ts`) e H11 mais 1 (`AdminApp.tsx`, mesmo padrão
+  de "carregar sessão uma vez") — total de 13 erros + 1 warning
+  pré-existente (`eslint-disable` não usado em `BarbersPanel.tsx`), todos
+  o mesmo padrão já aceito no código existente (chamar uma função que
+  atualiza estado dentro de um `useEffect` de "carregar uma vez"). H10
+  não introduziu nenhum erro novo (a mudança em `useUserRole.ts`
+  reaproveita o mesmo efeito já contado). Não é regressão de
+  comportamento (zero falha de teste/build), mas é uma refatoração
+  pendente: nenhum desses hooks/componentes usa o padrão mais novo
+  recomendado pelo eslint-plugin-react-hooks pra evitar o warning.
+- **CI ainda só builda o app de barbeiro (H11)**: o workflow de CI (H3,
+  branch separada) roda `npm run build`, que valida só o app de barbeiro.
+  Enquanto isso não for atualizado pra também rodar `npm run build:admin`,
+  um erro de tipo/build exclusivo do `AdminApp.tsx` (ou de qualquer coisa
+  só importada por ele) pode passar batido pelo CI e só aparecer no deploy
+  manual do serviço `levelzcut-admin`. `npx tsc -b` já cobre os dois (typecheck
+  é do projeto inteiro, não por entry point), então o risco é só de um
+  erro específico do Rollup/Vite ao montar o bundle admin.
 - **Entrega da senha temporária é 100% manual (H10)**: não tem email nem
   SMS — o admin vê a senha uma vez na tela e precisa repassar por fora
   (WhatsApp, verbalmente). Funciona, mas é um passo humano em toda
@@ -291,18 +366,21 @@ build`. Não faz deploy — é só gate de qualidade antes do merge.
 - **Um admin com muitas lojas ainda não tem UI de filtro**: `useStores()`
   no painel de admin sempre lista todas as lojas sem paginação/busca — não
   é problema com 1-2 lojas, mas se a rede crescer bastante vale revisitar.
-- **Bundle size**: o build gera um chunk único de ~589 kB (176 kB
-  gzip) — o Vite avisa que passou de 500 kB. Ainda não afeta a
-  experiência (é um dashboard interno, não um site público otimizado
-  pra Lighthouse), mas é candidato a code-splitting se a lista de
-  telas continuar crescendo.
+- **Bundle size do app de barbeiro**: ~582 kB (174 kB gzip) — o Vite
+  avisa que passou de 500 kB. Ainda não afeta a experiência (é um
+  dashboard interno, não um site público otimizado pra Lighthouse), mas é
+  candidato a code-splitting se a lista de telas continuar crescendo. O
+  app de administração (H11), por não carregar mais Recharts/DataEntry/
+  Reports, já sai bem menor (~195 kB, 62 kB gzip) e não dispara esse
+  aviso.
 - **Testes de UI de administração são superficiais**: os testes de
-  `App.adminTab.test.tsx`/`App.mustChangePassword.test.tsx` cobrem as
-  regras críticas de visibilidade e do gate de senha (nunca aparece sem
-  flag, aparece só pra admin, bloqueia até trocar a senha temporária),
-  mas não há testes de componente pra `StoresPanel`/`BarbersPanel`
-  isoladamente (fluxo de criar loja, cadastrar barbeiro, copiar senha
-  temporária, editar acesso).
+  `AdminApp.test.tsx`/`App.noAdmin.test.tsx`/`App.mustChangePassword.test.tsx`
+  cobrem as regras críticas de visibilidade e gate (administração nunca
+  aparece no app de barbeiro, bloqueia barbeiro comum no app de
+  administração, bloqueia até trocar a senha temporária), mas não há
+  testes de componente pra `StoresPanel`/`BarbersPanel` isoladamente
+  (fluxo de criar loja, cadastrar barbeiro, copiar senha temporária,
+  editar acesso).
 - **Edge Function sem teste automatizado**: `admin-barbers/index.ts`
   roda em Deno e não tem cobertura de teste neste repo (rodar Deno/Docker
   localmente está fora do que este squad consegue validar sem acesso ao
@@ -315,20 +393,25 @@ build`. Não faz deploy — é só gate de qualidade antes do merge.
 
 ## 9. Passos manuais pendentes (fora do acesso deste squad)
 
-1. Aplicar os patches de código (H6–H10) numa sessão com push liberado,
-   e abrir o(s) PR(s).
-2. Rodar `supabase/migrations/003_stores_roles_barber_access.sql` no SQL
+1. Rodar `supabase/migrations/003_stores_roles_barber_access.sql` no SQL
    Editor do Supabase.
-3. Bootstrap do primeiro admin (`insert into profiles ...`, ver README).
-4. Rodar `supabase/migrations/005_must_change_password.sql` (pode ser
-   antes ou depois do passo 3 — não depende de admin nenhum existir
+2. Bootstrap do primeiro admin (`insert into profiles ...`, ver README).
+3. Rodar `supabase/migrations/005_must_change_password.sql` (pode ser
+   antes ou depois do passo 2 — não depende de admin nenhum existir
    ainda).
-5. `supabase functions deploy admin-barbers` + `supabase secrets set
+4. `supabase functions deploy admin-barbers` + `supabase secrets set
    SUPABASE_SERVICE_ROLE_KEY=...`.
-6. Cadastrar cada barbeiro que já usa o painel (Administração →
-   Barbeiros → Cadastrar barbeiro) e liberar a(s) loja(s) dele — anotar
-   a senha temporária mostrada na hora e repassar por fora.
-7. Testar login em produção e avisar a equipe (mesma ordem de sempre).
+5. Criar o serviço `levelzcut-admin` no Render (H11) — a partir do
+   `render.yaml` se este projeto usa blueprint sync, ou manualmente pelo
+   dashboard (passo a passo no README, seção "Dois apps, duas URLs").
+   Configurar as mesmas variáveis `VITE_SUPABASE_URL`/
+   `VITE_SUPABASE_ANON_KEY` do serviço principal.
+6. Cadastrar cada barbeiro que já usa o painel (no app de administração,
+   recém-publicado no passo 5 → Barbeiros → Cadastrar barbeiro) e liberar
+   a(s) loja(s) dele — anotar a senha temporária mostrada na hora e
+   repassar por fora.
+7. Testar login em produção (nos dois apps) e avisar a equipe (mesma
+   ordem de sempre).
 8. Rodar a query de verificação do arquivo
    `004_barber_store_access_restriction.sql` e, só com resultado vazio,
    aplicar essa migration.

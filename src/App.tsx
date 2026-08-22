@@ -7,18 +7,22 @@ import { StoreSelector } from './components/StoreSelector';
 import { DataEntry } from './components/DataEntry';
 import { Reports } from './components/Reports';
 import { AIInsights } from './components/AIInsights';
-import { AdminPanel } from './components/Admin';
 import { useBarberData } from './hooks/useBarberData';
 import { useAccessibleStores } from './hooks/useAccessibleStores';
 import { useUserRole } from './hooks/useUserRole';
 import type { Store } from './types';
 import { STORES } from './types';
 import { isAuthRequired, getSession, onAuthStateChange, signOut } from './lib/supabase';
-import { Cloud, CloudOff, RefreshCw, Shield, Lock } from 'lucide-react';
+import { Cloud, CloudOff, RefreshCw, Lock } from 'lucide-react';
 
+// H11: este é o app de barbeiro — relatórios e lançamento de dados. Cadastro
+// de lojas e barbeiros virou um app à parte (ver src/AdminApp.tsx), com o
+// próprio deploy e a própria URL. Nada de administração é importado aqui:
+// quem entra por este app nunca baixa esse código, ele simplesmente não
+// existe neste bundle.
 export default function App() {
   const [selectedStore, setSelectedStore] = useState<Store>(STORES[0]);
-  const [activeTab, setActiveTab] = useState<'entry' | 'reports' | 'admin'>('reports');
+  const [activeTab, setActiveTab] = useState<'entry' | 'reports'>('reports');
   const { summaries, storeData, setMonthTotal, setDailyCuts, today, loading, isSupabaseConfigured, refreshData } = useBarberData(selectedStore.id);
 
   const [session, setSession] = useState<Session | null>(null);
@@ -49,20 +53,11 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stores]);
 
-  // Aba de administração só existe pra quem está autenticado E é admin —
-  // sem a flag de auth ligada, isAdmin nunca é true (ver useUserRole),
-  // então isso não muda nada da experiência atual.
-  const showAdminTab = isAuthRequired && isAdmin;
-
   // H9: um barbeiro autenticado mas ainda sem nenhuma loja liberada em
   // barber_stores não tem dashboard nenhum pra mostrar — em vez de deixar
   // aparecer um seletor vazio e gráficos zerados, mostra um aviso claro.
   // Nunca acontece com a flag desligada nem pra admin.
   const noAccessibleStores = isAuthRequired && !isAdmin && !storesLoading && stores.length === 0;
-
-  useEffect(() => {
-    if (activeTab === 'admin' && !showAdminTab) setActiveTab('reports');
-  }, [activeTab, showAdminTab]);
 
   if (isAuthRequired && authLoading) {
     return (
@@ -101,7 +96,7 @@ export default function App() {
             <Lock size={28} className="text-gray-600" />
             <p className="text-gray-300 font-medium">Você ainda não tem acesso a nenhuma loja.</p>
             <p className="text-gray-500 text-sm max-w-sm">
-              Peça pra um administrador liberar o seu acesso em Administração → Barbeiros → Editar acesso.
+              Peça pra um administrador liberar o seu acesso pelo painel de administração.
             </p>
           </div>
         ) : (
@@ -126,7 +121,6 @@ export default function App() {
               {([
                 ['reports', 'Relatórios'],
                 ['entry', 'Lançar Dados'],
-                ...(showAdminTab ? ([['admin', 'Administração']] as const) : []),
               ] as const).map(([id, label]) => (
                 <button
                   key={id}
@@ -135,15 +129,12 @@ export default function App() {
                     activeTab === id ? 'bg-yellow-600 text-black' : 'text-gray-400 hover:text-gray-200'
                   }`}
                 >
-                  {id === 'admin' && <Shield size={14} />}
                   {label}
                 </button>
               ))}
             </div>
 
-            {activeTab === 'admin' && showAdminTab ? (
-              <AdminPanel />
-            ) : loading ? (
+            {loading ? (
               <div className="flex items-center justify-center py-20">
                 <RefreshCw size={32} className="animate-spin text-yellow-600" />
               </div>

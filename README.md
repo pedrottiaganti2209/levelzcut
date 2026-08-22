@@ -13,7 +13,9 @@ insights de faturamento.
   na nuvem; sem Supabase configurado, o app funciona em modo local usando
   `localStorage`
 - [Vitest](https://vitest.dev/) + Testing Library — testes
-- Deploy estático no [Render](https://render.com/) (ver `render.yaml`)
+- Deploy estático no [Render](https://render.com/) (ver `render.yaml`) — a
+  partir do H11, dois serviços/URLs: o app de barbeiro e o app de
+  administração (ver "Administração: lojas e barbeiros")
 
 ## Rodando localmente
 
@@ -141,25 +143,66 @@ Isso é uma conta pessoal/da organização no UptimeRobot — a squad não tem
 esse acesso, então essa configuração é sempre um passo manual de quem tem
 a conta.
 
-## Administração: lojas e barbeiros (H6–H10)
+## Administração: lojas e barbeiros (H6–H11)
 
-Jornada do dono da barbearia: um admin loga, cadastra lojas (hoje só existe
-"Moema", mas o modelo já suporta várias) e convida barbeiros, escolhendo a
-quais lojas cada um tem acesso. Todo esse código **já está no app**, mas —
-seguindo a mesma doutrina do login — fica atrás de duas travas e não muda
-nada da experiência de quem já usa o painel:
+Jornada do dono da barbearia: cadastra lojas (hoje só existe "Moema", mas o
+modelo já suporta várias) e cadastra barbeiros, escolhendo a quais lojas
+cada um tem acesso. Todo esse código **já está pronto**, e a partir do H11
+ele não faz mais parte do mesmo app que os barbeiros usam no dia a dia —
+virou um app publicado à parte, com sua própria URL (ver a seção seguinte).
 
-1. **A mesma flag `VITE_REQUIRE_AUTH`** — sem login ligado, não existe
-   conceito de "usuário logado", então a aba de Administração nunca aparece.
-2. **Role `admin` na tabela `profiles`** — mesmo com login ligado, a aba só
-   aparece pra quem tem `role='admin'`. Todo barbeiro entra como
-   `'barbeiro'` por padrão (ver "Bootstrap do primeiro admin" abaixo).
+### Dois apps, duas URLs (H11)
 
-Ou seja: a aba só é mostrada quando `isAuthRequired` (a mesma flag de login,
-`src/lib/supabase.ts`) e `isAdmin` (papel do usuário logado) são verdadeiros
-ao mesmo tempo. Com o app funcionando como hoje (flag desligada), essa
-condição nunca é verdadeira — zero mudança visual ou de comportamento pra
-quem já usa o dashboard.
+Até o H10, administração era uma aba a mais dentro do mesmo app, escondida
+atrás de `isAuthRequired && isAdmin`. O H11 separa isso de verdade em "dois
+mundos":
+
+- **App de barbeiro** (`src/App.tsx`, `main.tsx`, `index.html`) —
+  Relatórios e Lançar Dados. É o serviço `levelzcut` que já está no ar,
+  **sem nenhuma mudança de configuração**: mesma URL, mesmo build (`npm run
+  build` / `npm run dev`). Esse bundle não importa mais nenhum código de
+  Lojas/Barbeiros — não é só escondido, ele simplesmente não existe aqui.
+- **App de administração** (`src/AdminApp.tsx`, `src/main.admin.tsx`,
+  `admin.html`, `vite.config.admin.ts`) — Lojas e Barbeiros. Publicado num
+  serviço novo, com uma URL própria (`npm run build:admin` / `npm run
+  dev:admin`). Login é **sempre exigido** aqui, incondicionalmente — essa
+  tela não fica atrás da flag `VITE_REQUIRE_AUTH` como o resto do app,
+  porque publicar este app como um serviço à parte já É o passo deliberado
+  de ativação (ninguém chega aqui sem saber o endereço). Só quem tem
+  `role='admin'` em `profiles` passa da tela de login pro painel — um
+  barbeiro que tentar entrar vê uma mensagem clara e é levado de volta pro
+  login.
+
+Os dois apps compartilham o **mesmo projeto Supabase** por trás — mesmo
+banco, mesma autenticação, mesma Edge Function `admin-barbers`, mesmas
+regras de RLS (a restrição por loja do H9 continua valendo igual,
+independente de qual app foi usado pra acessar os dados). **Importante:**
+essa separação não é uma nova camada de segurança — quem sempre garantiu
+que um barbeiro não visse dado de outra loja, ou que só admin cadastrasse
+gente nova, foi a RLS do banco e a Edge Function reconfirmando o papel no
+servidor (ver "Autenticação e proteção dos dados" acima). Separar os apps
+deixa a intenção mais clara pra quem usa e reduz o que cada lado baixa —
+não substitui nenhuma trava que já existia.
+
+**Passo manual — criar o serviço `levelzcut-admin` no Render**: o
+`render.yaml` já descreve os dois serviços, mas se este projeto no Render
+não foi criado originalmente a partir deste blueprint, o segundo serviço
+precisa ser criado à mão pelo dashboard:
+
+1. Dashboard do Render → **New → Static Site**, conectando o mesmo
+   repositório.
+2. Build Command: `npm install && npm run build:admin`
+3. Publish directory: `dist-admin`
+4. Em **Redirects/Rewrites**, adicionar uma regra `/*` → `/admin.html`
+   (rewrite, não redirect).
+5. Configurar as mesmas variáveis `VITE_SUPABASE_URL` e
+   `VITE_SUPABASE_ANON_KEY` do serviço principal (e `VITE_SENTRY_DSN`, se
+   estiver usando) — **não** precisa de `VITE_REQUIRE_AUTH` aqui, o login
+   já é sempre exigido.
+6. Depois do primeiro deploy, a URL gerada (ex.:
+   `levelzcut-admin.onrender.com`) deve ser repassada só pra quem
+   administra — diferente da URL do app de barbeiro, essa não precisa (nem
+   deve) ser divulgada pra quem só usa Relatórios/Lançar Dados.
 
 ### Modelo de dados
 
@@ -207,7 +250,7 @@ repetir esse passo manual de novo.
 
 ### Painel de Lojas (H7)
 
-Aba **Administração → Lojas**: formulário simples pra cadastrar loja nova
+No app de administração, aba **Lojas**: formulário simples pra cadastrar loja nova
 (nome + id gerado automaticamente, ex.: "Vila Madalena" → `vila-madalena`,
 sem acento/maiúscula/espaço) e lista das lojas existentes. Usa
 `src/lib/stores.ts` (`fetchStores`/`createStore`/`updateStore`), que cai
@@ -217,7 +260,7 @@ a migration 003 ainda não tiver rodado — o seletor de loja no topo do app
 
 ### Painel de Barbeiros (H8, cadastro revisado no H10)
 
-Aba **Administração → Barbeiros**: cadastra um barbeiro por email e marca
+No app de administração, aba **Barbeiros**: cadastra um barbeiro por email e marca
 quais lojas ele acessa; lista os barbeiros existentes com opção de editar
 o acesso depois. Isso **precisa** de uma Edge Function
 (`supabase/functions/admin-barbers`), porque criar usuário exige a
@@ -294,7 +337,8 @@ obrigatória antes de rodar:
 
 1. Migration 003 já aplicada, com o bootstrap do primeiro admin feito.
 2. Todo barbeiro que hoje usa o painel já foi cadastrado e já tem pelo
-   menos uma loja liberada (Administração → Barbeiros → Editar acesso).
+   menos uma loja liberada (app de administração → Barbeiros → Editar
+   acesso).
 3. Login testado em produção e equipe avisada (mesma ordem de sempre).
 4. Rodar a query de verificação do arquivo da migration — resultado tem
    que vir vazio.
@@ -307,17 +351,30 @@ exige autenticação por si só (além de exigir a loja certa).
 
 ## Estrutura do projeto
 
+Dois pontos de entrada (H11) — `index.html`/`main.tsx` (app de barbeiro) e
+`admin.html`/`main.admin.tsx` (app de administração) — compartilhando o
+mesmo `src/`. Cada bundle só importa o que o seu `App`/`AdminApp` usa; não é
+preciso mover arquivo nenhum pra pasta separada pra isso acontecer.
+
 ```
+index.html            # entrada do app de barbeiro (build padrão)
+admin.html             # entrada do app de administração (H11)
+vite.config.ts         # build do app de barbeiro (sem mudança)
+vite.config.admin.ts   # build do app de administração (H11)
 src/
+  App.tsx               # app de barbeiro — Relatórios, Lançar Dados
+  AdminApp.tsx            # app de administração (H11) — Lojas, Barbeiros
+  main.tsx                # entry do app de barbeiro
+  main.admin.tsx           # entry do app de administração (H11)
   components/     # UI (Header, Login, StoreSelector, DataEntry, Reports, AIInsights)
-  components/ChangePassword.tsx # troca de senha obrigatória (H10)
-  components/Admin/   # painéis de Lojas e Barbeiros (H7/H8)
+  components/ChangePassword.tsx # troca de senha obrigatória (H10) — parte do app de barbeiro
+  components/Admin/   # painéis de Lojas e Barbeiros (H7/H8) — usados só pelo AdminApp
   hooks/useBarberData.ts # carrega/salva dados por loja
-  hooks/useStores.ts     # carrega TODAS as lojas (usado só no painel de admin)
-  hooks/useAccessibleStores.ts # lojas que O USUÁRIO ATUAL pode acessar (H9)
-  hooks/useUserRole.ts   # resolve role + must_change_password da sessão logada (H10)
-  lib/supabase.ts # client Supabase + helpers de auth + flag isAuthRequired (VITE_REQUIRE_AUTH)
-  lib/stores.ts        # CRUD de lojas + fetchAccessibleStores (H6/H9)
+  hooks/useStores.ts     # carrega TODAS as lojas (usado só no app de administração)
+  hooks/useAccessibleStores.ts # lojas que O USUÁRIO ATUAL pode acessar (H9, app de barbeiro)
+  hooks/useUserRole.ts   # resolve role + must_change_password da sessão logada (H10, usado pelos dois apps)
+  lib/supabase.ts     # client Supabase + helpers de auth + flag isAuthRequired (VITE_REQUIRE_AUTH) — só o app de barbeiro usa a flag
+  lib/stores.ts        # CRUD de lojas
   lib/profile.ts        # busca role + must_change_password do usuário logado
   lib/adminApi.ts        # chamadas pra Edge Function admin-barbers
   utils/          # storage (local/Supabase), analytics, insights

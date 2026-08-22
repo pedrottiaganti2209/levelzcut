@@ -90,6 +90,32 @@ que permite acesso com a anon key independentemente do login do app —
 travar isso no banco é uma migration separada, aditiva e aplicada
 manualmente (fora do escopo desta história).
 
+## Monitoramento de erro em runtime (Sentry)
+
+Erros em produção (exceções não tratadas e falhas de leitura/escrita no
+Supabase) podem ser reportados pro [Sentry](https://sentry.io/) (plano
+gratuito), em vez de só `console.error` — que ninguém vê depois do fato.
+
+Fica atrás da variável `VITE_SENTRY_DSN` (ver `src/lib/sentry.ts`): sem
+essa variável definida, o Sentry **não é inicializado** e o app funciona
+exatamente como hoje — é opt-in, não tem custo de ativar por engano.
+
+Pra ativar:
+
+1. Crie um projeto gratuito em sentry.io (tipo "React").
+2. Copie o DSN do projeto e configure `VITE_SENTRY_DSN` nas variáveis de
+   ambiente do serviço no Render (lembrando: é uma variável `VITE_*`, lida
+   em build time — precisa de novo deploy pra fazer efeito, igual as
+   outras).
+
+**Sobre dado sensível**: a configuração usa `sendDefaultPii: false` (não
+captura IP, cookies, headers) e tracing de performance desligado
+(`tracesSampleRate: 0`). Os erros de Supabase (`storage.ts`) são reportados
+passando só o objeto de erro em si (mensagem/código do Postgres) — nunca o
+`payload` que contém os valores de faturamento (`total`/`dailyCuts`), e o
+app nunca chama `Sentry.setUser()`, então nenhum email/identificador de
+usuário é anexado aos eventos.
+
 ## Monitoramento de disponibilidade (uptime)
 
 O app não tem servidor próprio (é estático, hospedado no Render), então o

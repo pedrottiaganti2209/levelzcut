@@ -248,6 +248,19 @@ Depois disso, esse usuário já pode promover outros admins direto pela UI
 (via a policy de escrita em `profiles`, que exige ser admin) — não precisa
 repetir esse passo manual de novo.
 
+**Passo manual — aplicar a migration 006 (leitura pública de `stores`)**:
+a policy original de `SELECT` em `stores` (acima) exige usuário
+autenticado — mas o app de barbeiro (`levelzcut`) roda sem login
+enquanto `VITE_REQUIRE_AUTH` não for ativado (ver checklist no início
+deste README). Resultado: lojas cadastradas pelo painel de Administração
+não aparecem no app de barbeiro, que cai no fallback fixo do código (só
+"Moema"). `supabase/migrations/006_public_store_read.sql` troca essa
+policy por leitura pública — não é uma regressão de segurança, já que
+`cuts_data` (o dado que de fato importa proteger) já é público hoje até
+o login ser ativado de propósito, e nome de loja não é dado sensível.
+Copie o conteúdo do arquivo no SQL Editor do Supabase e execute (pode
+rodar a qualquer momento depois da 003).
+
 ### Painel de Lojas (H7)
 
 No app de administração, aba **Lojas**: formulário simples pra cadastrar loja nova

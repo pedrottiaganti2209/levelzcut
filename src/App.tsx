@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import type { Session } from '@supabase/supabase-js';
 import { Header } from './components/Header';
+import { Login } from './components/Login';
 import { StoreSelector } from './components/StoreSelector';
 import { DataEntry } from './components/DataEntry';
 import { Reports } from './components/Reports';
@@ -7,6 +9,7 @@ import { AIInsights } from './components/AIInsights';
 import { useBarberData } from './hooks/useBarberData';
 import type { Store } from './types';
 import { STORES } from './types';
+import { isSupabaseConfigured as supabaseConfigured, getSession, onAuthStateChange, signOut } from './lib/supabase';
 import { Cloud, CloudOff, RefreshCw } from 'lucide-react';
 
 export default function App() {
@@ -14,9 +17,34 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'entry' | 'reports'>('reports');
   const { summaries, storeData, setMonthTotal, setDailyCuts, today, loading, isSupabaseConfigured, refreshData } = useBarberData(selectedStore.id);
 
+  const [session, setSession] = useState<Session | null>(null);
+  const [authLoading, setAuthLoading] = useState(supabaseConfigured);
+
+  useEffect(() => {
+    if (!supabaseConfigured) return;
+    getSession().then((s) => {
+      setSession(s);
+      setAuthLoading(false);
+    });
+    const { data } = onAuthStateChange((s) => setSession(s));
+    return () => data.subscription.unsubscribe();
+  }, []);
+
+  if (supabaseConfigured && authLoading) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        <RefreshCw size={32} className="animate-spin text-yellow-600" />
+      </div>
+    );
+  }
+
+  if (supabaseConfigured && !session) {
+    return <Login />;
+  }
+
   return (
     <div className="min-h-screen bg-black text-white">
-      <Header />
+      <Header onSignOut={supabaseConfigured ? () => signOut() : undefined} />
       <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex-1">

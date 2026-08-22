@@ -14,10 +14,15 @@
 // acesso à conta Supabase pra rodar isso. Ver README (seção H8) pro passo
 // a passo com o Supabase CLI.
 //
-// SEGREDO NECESSÁRIO: SUPABASE_SERVICE_ROLE_KEY precisa estar configurada
-// como "secret" da função no painel do Supabase (Edge Functions → Secrets)
-// — SUPABASE_URL e SUPABASE_ANON_KEY já ficam disponíveis automaticamente
-// em toda Edge Function. Nunca coloque a service role key numa variável
+// SEGREDOS NECESSÁRIOS: SB_ANON_KEY e SB_SERVICE_ROLE_KEY precisam estar
+// configurados como "secrets" da função no painel do Supabase (Edge
+// Functions → Secrets). Não dá pra usar os nomes SUPABASE_ANON_KEY /
+// SUPABASE_SERVICE_ROLE_KEY — nas versões atuais do Supabase, secrets
+// customizados não podem começar com o prefixo "SUPABASE_" (é reservado
+// pros valores automáticos da própria plataforma, que agora usam outro
+// formato — SUPABASE_PUBLISHABLE_KEYS/SUPABASE_SECRET_KEYS — em vez das
+// chaves simples que este código usa). SUPABASE_URL continua automático,
+// não precisa configurar. Nunca coloque a service role key numa variável
 // VITE_* (isso a exporia no bundle do front-end).
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -165,8 +170,8 @@ Deno.serve(async (req: Request) => {
     if (!authHeader) return json({ error: 'Requisição sem autenticação.' }, 401);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const anonKey = Deno.env.get('SB_ANON_KEY')!;
+    const serviceRoleKey = Deno.env.get('SB_SERVICE_ROLE_KEY')!;
 
     // Client "de quem chamou" — só pra descobrir quem é, com o próprio JWT.
     const callerClient = createClient(supabaseUrl, anonKey, {

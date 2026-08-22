@@ -238,8 +238,17 @@ bundle do cliente. Por isso essas ações passam por uma Edge Function
    (`list`, `create_barber`, `update_access`).
 
 Ou seja, a função reverifica admin no servidor — nunca confia numa claim de
-role vinda do cliente. Deploy e a secret `SUPABASE_SERVICE_ROLE_KEY` são
-passos manuais fora do acesso deste squad (comandos no README).
+role vinda do cliente. Deploy e os secrets `SB_ANON_KEY`/
+`SB_SERVICE_ROLE_KEY` são passos manuais fora do acesso deste squad
+(comandos no README).
+
+**Nomes dos secrets**: nas versões atuais do Supabase, um secret de Edge
+Function não pode começar com o prefixo `SUPABASE_` (reservado pros
+valores automáticos da plataforma — que hoje expõe as chaves como
+`SUPABASE_PUBLISHABLE_KEYS`/`SUPABASE_SECRET_KEYS`, um formato diferente
+do que este código espera). Por isso os secrets são `SB_ANON_KEY` e
+`SB_SERVICE_ROLE_KEY` — nomes escolhidos pelo squad, sem relação com
+nenhuma convenção do Supabase. `SUPABASE_URL` continua automático.
 
 ### 5.5 Cadastro com senha temporária (H10)
 
@@ -399,8 +408,9 @@ build`. Não faz deploy — é só gate de qualidade antes do merge.
 3. Rodar `supabase/migrations/005_must_change_password.sql` (pode ser
    antes ou depois do passo 2 — não depende de admin nenhum existir
    ainda).
-4. `supabase functions deploy admin-barbers` + `supabase secrets set
-   SUPABASE_SERVICE_ROLE_KEY=...`.
+4. Publicar a Edge Function `admin-barbers` (CLI ou Dashboard) e
+   configurar os secrets `SB_ANON_KEY`/`SB_SERVICE_ROLE_KEY` (não
+   `SUPABASE_*` — ver seção 5.4).
 5. Criar o serviço `levelzcut-admin` no Render (H11) — a partir do
    `render.yaml` se este projeto usa blueprint sync, ou manualmente pelo
    dashboard (passo a passo no README, seção "Dois apps, duas URLs").

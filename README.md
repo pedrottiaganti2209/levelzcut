@@ -271,20 +271,26 @@ painel, confirma que quem está chamando é admin (lendo `profiles` com o
 JWT de quem chamou, antes de usar a service role pra qualquer coisa) e só
 então executa a ação.
 
-**Passos manuais — publicar a Edge Function** (precisa da Supabase CLI e
-não pode ser feito por este squad, que não tem acesso ao projeto Supabase):
+**Passos manuais — publicar a Edge Function**: pode ser via Supabase CLI
+(`supabase functions deploy admin-barbers`) ou direto pelo Dashboard
+(Edge Functions → Deploy a new function → Via Editor → colar o código de
+`supabase/functions/admin-barbers/index.ts`, nome exato `admin-barbers`).
 
-```bash
-supabase functions deploy admin-barbers
-supabase secrets set SUPABASE_SERVICE_ROLE_KEY=<a service_role key do projeto>
-```
+Depois, configure os secrets da função em Edge Functions → Secrets:
 
-`SUPABASE_URL` e `SUPABASE_ANON_KEY` já ficam disponíveis automaticamente
-dentro da função; só a `SUPABASE_SERVICE_ROLE_KEY` precisa ser configurada
-como secret à mão (Project Settings → API → `service_role` no Dashboard, ou
-`supabase secrets set`). Até isso ser feito, o painel de Lojas funciona
-normalmente, mas o painel de Barbeiros mostra erro ao tentar cadastrar ou
-listar — sem quebrar o resto do app.
+- `SB_ANON_KEY` = a `anon`/`publishable` key do projeto
+- `SB_SERVICE_ROLE_KEY` = a `service_role`/`secret` key do projeto
+
+`SUPABASE_URL` já fica disponível automaticamente dentro da função. **Não
+dá pra usar os nomes `SUPABASE_ANON_KEY`/`SUPABASE_SERVICE_ROLE_KEY`** —
+nas versões atuais do Supabase, secrets customizados não podem começar
+com o prefixo `SUPABASE_` (reservado pros valores automáticos da própria
+plataforma, que hoje usa outro formato — `SUPABASE_PUBLISHABLE_KEYS`/
+`SUPABASE_SECRET_KEYS` — em vez das chaves simples que este código
+espera). Por isso os nomes `SB_ANON_KEY`/`SB_SERVICE_ROLE_KEY` foram
+escolhidos, e o código da função lê exatamente esses nomes. Até isso ser
+feito, o painel de Lojas funciona normalmente, mas o painel de Barbeiros
+mostra erro ao tentar cadastrar ou listar — sem quebrar o resto do app.
 
 ### Cadastro com senha temporária (H10)
 

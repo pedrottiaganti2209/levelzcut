@@ -1,5 +1,6 @@
 import type { MonthData, StoreData } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { reportError } from '../lib/sentry';
 
 const STORAGE_KEY = 'levelzcut_data';
 
@@ -34,6 +35,9 @@ export async function loadStoreDataRemote(storeId: string): Promise<StoreData> {
     .eq('store_id', storeId);
   if (error) {
     console.error('Supabase load error:', error);
+    // Só o objeto de erro do Supabase (mensagem/código) — sem dado de
+    // faturamento nem identificar o usuário.
+    reportError(error, 'storage.loadStoreDataRemote');
     return { storeId, months: [] };
   }
   const months: MonthData[] = (data || []).map((row: any) => ({
@@ -62,7 +66,11 @@ export async function saveMonthDataRemote(storeId: string, monthData: MonthData)
   const { error } = await supabase
     .from('cuts_data')
     .upsert(payload, { onConflict: 'store_id,year,month' });
-  if (error) console.error('Supabase save error:', error);
+  if (error) {
+    console.error('Supabase save error:', error);
+    // Idem: só o erro, nunca o `payload` (que contém total/dailyCuts).
+    reportError(error, 'storage.saveMonthDataRemote');
+  }
 }
 
 // ─── Unified API ─────────────────────────────────────────────────────────────

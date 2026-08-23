@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import type { MonthData, Store } from '../types';
-import { buildStoreOverviewRows, sortOverviewRows, computeNetworkTotals } from '../lib/networkData';
+import {
+  buildStoreOverviewRows,
+  sortOverviewRows,
+  computeNetworkTotals,
+  buildMonthlyStoreSeries,
+} from '../lib/networkData';
 
 // H22: Visão Geral consolidada da rede — testa as funções puras de
 // agregação/ranking isoladamente (mais direto que montar o componente
@@ -123,6 +128,55 @@ describe('loja em queda (H23)', () => {
     const decliningRows = rows.filter((r) => r.isDeclining);
     expect(decliningRows.length).toBe(2);
     expect(decliningRows.map((r) => r.store.id).sort()).toEqual(['moema', 'vila']);
+  });
+});
+
+describe('buildMonthlyStoreSeries (H26)', () => {
+  it('gera o número certo de linhas pra cada intervalo (3/6/12)', () => {
+    expect(buildMonthlyStoreSeries([MOEMA], {}, TODAY, 3)).toHaveLength(3);
+    expect(buildMonthlyStoreSeries([MOEMA], {}, TODAY, 6)).toHaveLength(6);
+    expect(buildMonthlyStoreSeries([MOEMA], {}, TODAY, 12)).toHaveLength(12);
+  });
+
+  it('a última linha é sempre o mês corrente, com o rótulo certo', () => {
+    const series = buildMonthlyStoreSeries([MOEMA], {}, TODAY, 3);
+    const last = series[series.length - 1];
+    expect(last.year).toBe(2026);
+    expect(last.monthNum).toBe(8);
+    expect(last.month).toBe('Agosto/26');
+  });
+
+  it('atravessa a virada de ano corretamente', () => {
+    const janeiro2026 = new Date(2026, 0, 15); // Jan/2026
+    const series = buildMonthlyStoreSeries([MOEMA], {}, janeiro2026, 3);
+    // Nov/25, Dez/25, Jan/26
+    expect(series.map((s) => `${s.monthNum}/${s.year}`)).toEqual(['11/2025', '12/2025', '1/2026']);
+  });
+
+  it('cada loja tem seu total por mês, lado a lado', () => {
+    const cutsByStore = {
+      moema: months([[2026, 8, 80]]),
+      pinheiros: months([[2026, 8, 30]]),
+    };
+    const series = buildMonthlyStoreSeries([MOEMA, PINHEIROS], cutsByStore, TODAY, 3);
+    const currentMonthRow = series[series.length - 1];
+    expect(currentMonthRow.values.moema).toBe(80);
+    expect(currentMonthRow.values.pinheiros).toBe(30);
+  });
+
+  it('loja sem nenhum dado no período aparece com 0, sem quebrar', () => {
+    const series = buildMonthlyStoreSeries([MOEMA], {}, TODAY, 3);
+    series.forEach((row) => expect(row.values.moema).toBe(0));
+  });
+
+  it('nunca gera mês anterior ao início dos dados do produto (DATA_START)', () => {
+    // Fev/2025 com range de 12 meses voltaria pra antes de jan/2025
+    // (DATA_START) se não fosse travado.
+    const fev2025 = new Date(2025, 1, 10);
+    const series = buildMonthlyStoreSeries([MOEMA], {}, fev2025, 12);
+    const first = series[0];
+    expect(first.year).toBe(2025);
+    expect(first.monthNum).toBe(1);
   });
 });
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { LayoutGrid, RefreshCw, DollarSign, Scissors, Store as StoreIcon, AlertTriangle } from 'lucide-react';
 import { useStores } from '../../hooks/useStores';
 import { fetchAllCutsData, buildStoreOverviewRows, sortOverviewRows, computeNetworkTotals } from '../../lib/networkData';
+import { NetworkMonthlyChart } from './NetworkMonthlyChart';
 import type { MonthData } from '../../types';
 
 // H22: consolida faturamento/cortes de TODAS as lojas numa tela só —
@@ -183,6 +184,8 @@ export function OverviewPanel() {
               </div>
             )}
           </div>
+
+          {!isLoading && <NetworkMonthlyChart stores={stores} cutsByStore={cutsByStore} />}
         </>
       )}
     </div>

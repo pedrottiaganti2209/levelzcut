@@ -2,7 +2,7 @@ import { supabase } from './supabase';
 import { reportError } from './sentry';
 import type { MonthData, Store } from '../types';
 import { DATA_START } from '../types';
-import { getAllMonths, buildSummaries, getAverage } from '../utils/analytics';
+import { getAllMonths, buildSummaries, getAverage, getMonthLabel } from '../utils/analytics';
 
 // H22: dados e cálculos de faturamento consolidados de TODAS as lojas,
 // pra Visão Geral do app de administração. Só usado pelo AdminApp — nunca
@@ -110,6 +110,64 @@ export function sortOverviewRows(rows: StoreOverviewRow[]): { rows: StoreOvervie
     sortBy === 'revenue' ? (b.revenue ?? 0) - (a.revenue ?? 0) : b.currentMonthCuts - a.currentMonthCuts
   );
   return { rows: sorted, sortBy };
+}
+
+// H26: quantos meses o gráfico "Cortes por mês, por loja" pode mostrar —
+// o admin escolhe entre esses três.
+export const MONTHLY_CHART_RANGES = [3, 6, 12] as const;
+export type MonthlyChartRange = (typeof MONTHLY_CHART_RANGES)[number];
+
+export interface MonthlyStoreSeriesRow {
+  /** Rótulo do mês (ex.: "Ago/26"), já pronto pro eixo X. */
+  month: string;
+  year: number;
+  monthNum: number;
+  /** storeId -> total de cortes naquele mês. */
+  values: Record<string, number>;
+}
+
+/**
+ * Série mensal por loja, pros últimos N meses (3/6/12, H26) — usada pelo
+ * gráfico de barras agrupadas da Visão Geral. Diferente de
+ * `buildStoreOverviewRows` (que olha só o mês corrente), aqui é uma linha
+ * por mês, com o total de cada loja lado a lado — dá pra comparar lojas
+ * mês a mês, não só o instantâneo do mês atual.
+ */
+export function buildMonthlyStoreSeries(
+  stores: Store[],
+  cutsByStore: Record<string, MonthData[]>,
+  today: Date,
+  monthsCount: MonthlyChartRange
+): MonthlyStoreSeriesRow[] {
+  const currentYear = today.getFullYear();
+  const currentMonth = today.getMonth() + 1;
+
+  let startYear = currentYear;
+  let startMonth = currentMonth - (monthsCount - 1);
+  while (startMonth <= 0) {
+    startMonth += 12;
+    startYear -= 1;
+  }
+  // Nunca busca antes de DATA_START — mês antes do início dos dados do
+  // app simplesmente não teria nenhuma linha em cuts_data, então ficaria
+  // 0 pra todas as lojas de qualquer forma; não muda o resultado, só
+  // evita gerar meses "fantasma" antes do produto existir.
+  if (startYear < DATA_START.year || (startYear === DATA_START.year && startMonth < DATA_START.month)) {
+    startYear = DATA_START.year;
+    startMonth = DATA_START.month;
+  }
+
+  const range = getAllMonths(startYear, startMonth, currentYear, currentMonth);
+
+  return range.map(({ year, month }) => {
+    const values: Record<string, number> = {};
+    stores.forEach((store) => {
+      const storeMonths = cutsByStore[store.id] ?? [];
+      const [summary] = buildSummaries([{ year, month }], storeMonths);
+      values[store.id] = summary.total;
+    });
+    return { month: getMonthLabel(year, month), year, monthNum: month, values };
+  });
 }
 
 export function computeNetworkTotals(rows: StoreOverviewRow[]) {

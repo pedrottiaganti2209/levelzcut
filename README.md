@@ -449,9 +449,9 @@ admin em `cuts_data`, da migration 004, já libera essa leitura sem
 filtro por loja — nenhuma policy nova é necessária). Faturamento da rede
 soma só as lojas com preço cadastrado (H21); se nem toda loja tiver
 preço, o ranking ordena por total de cortes em vez de faturamento, com
-um aviso indicando isso. Implementado com barras em CSS puro — Recharts
-não entra no bundle do admin (o app de barbeiro já paga esse custo, o de
-administração não precisa).
+um aviso indicando isso. O ranking em si é implementado com barras em
+CSS puro. **Atualização (H26)**: o Recharts passou a entrar no bundle do
+admin — ver seção abaixo.
 
 ### Alerta de loja em queda (H23)
 
@@ -463,6 +463,28 @@ bloqueia a loja. Um card no topo conta quantas lojas estão nessa
 condição e leva até elas no ranking. Loja com menos de 2 meses de
 histórico nunca é avaliada, pra não marcar loja nova sem base de
 comparação.
+
+### Cortes por mês, por loja (H26)
+
+Gráfico de barras agrupadas na Visão Geral, abaixo do ranking — uma barra
+por loja, lado a lado, por mês. O admin escolhe entre 3, 6 ou 12 últimos
+meses (botões no topo do gráfico, `MONTHLY_CHART_RANGES` em
+`lib/networkData.ts`). Não busca dado novo: usa o mesmo `cuts_data` que a
+Visão Geral já carregou.
+
+**Traz o Recharts de volta pro bundle do admin** (o H22 tinha evitado de
+propósito, com barras em CSS puro, porque não era necessário ainda) — bundle
+do admin salta de ~197 kB pra ~501 kB. É um app usado só por quem administra
+(não todo dia, por muita gente), então o tradeoff vale a pena aqui; o app de
+barbeiro **não é afetado** (já paga esse custo desde sempre, sem mudança).
+
+Cor de cada loja (identidade, nunca por posição no ranking) vem de uma
+paleta categórica de 8 cores, ordem fixa, validada com o script da skill de
+dataviz do Claude Code (`validate_palette.js`) contra a cor de fundo real
+dos cards deste app (`#111827`) — separação de daltonismo (protanopia/
+deuteranopia) ≥ 8 ΔE, contraste ≥ 3:1, todos PASS. Acima de 8 lojas, as
+excedentes somam numa barra "Outras" (cinza) em vez de reciclar a cor de
+outra loja — identidade não pode ser ambígua.
 
 ### Busca em Lojas e Barbeiros (H24)
 

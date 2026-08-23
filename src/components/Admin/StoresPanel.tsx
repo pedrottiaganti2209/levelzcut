@@ -1,7 +1,72 @@
 import { useState, type FormEvent } from 'react';
-import { Store as StoreIcon, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { Store as StoreIcon, Plus, RefreshCw, Trash2, Check } from 'lucide-react';
 import { useStores } from '../../hooks/useStores';
-import { createStore, deleteStore, slugifyStoreId } from '../../lib/stores';
+import { createStore, deleteStore, updateStore, slugifyStoreId } from '../../lib/stores';
+import type { Store } from '../../types';
+
+/**
+ * Preço médio por corte (H21) — campo de edição próprio por linha, com seu
+ * próprio estado local (rascunho, salvando, salvo). Fica num componente à
+ * parte pra não precisar de um mapa de estado por loja no painel inteiro.
+ */
+function StorePriceField({ store, onSaved }: { store: Store; onSaved: () => void }) {
+  const [value, setValue] = useState(store.pricePerCut !== undefined ? String(store.pricePerCut) : '');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    setError(null);
+    setSaved(false);
+    const trimmed = value.trim();
+    const parsed = trimmed === '' ? null : Number(trimmed.replace(',', '.'));
+    if (parsed !== null && (Number.isNaN(parsed) || parsed < 0)) {
+      setError('Preço inválido.');
+      return;
+    }
+    setSaving(true);
+    const { error: updateErr } = await updateStore(store.id, { pricePerCut: parsed });
+    setSaving(false);
+    if (updateErr) {
+      setError(updateErr.message);
+      return;
+    }
+    setSaved(true);
+    onSaved();
+  };
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <label htmlFor={`price-${store.id}`} className="text-xs text-gray-500 uppercase tracking-wider">
+        Preço médio por corte (R$)
+      </label>
+      <input
+        id={`price-${store.id}`}
+        value={value}
+        onChange={(e) => {
+          setValue(e.target.value);
+          setSaved(false);
+        }}
+        placeholder="não definido"
+        inputMode="decimal"
+        className="w-24 bg-black border border-gray-700 rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-yellow-600"
+      />
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="flex items-center gap-1 text-xs text-gray-400 hover:text-yellow-500 transition-colors uppercase tracking-wider disabled:opacity-50"
+      >
+        {saved && <Check size={12} />}
+        {saving ? 'Salvando...' : saved ? 'Salvo' : 'Salvar'}
+      </button>
+      {error && (
+        <span className="text-xs text-red-500" role="alert">
+          {error}
+        </span>
+      )}
+    </div>
+  );
+}
 
 export function StoresPanel() {
   const { stores, loading, reload } = useStores();
@@ -145,6 +210,10 @@ export function StoresPanel() {
                   <Trash2 size={14} />
                 </button>
               )}
+            </div>
+
+            <div className="mt-2">
+              <StorePriceField store={store} onSaved={reload} />
             </div>
 
             {confirmingId === store.id && (

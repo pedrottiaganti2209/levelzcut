@@ -2,6 +2,8 @@ export interface Store {
   id: string;
   name: string;
   displayName: string;
+  /** Preço médio por corte (R$), cadastrado no painel de Lojas (H21). undefined = não cadastrado. */
+  pricePerCut?: number;
 }
 
 export interface MonthData {

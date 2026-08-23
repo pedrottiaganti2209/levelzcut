@@ -9,10 +9,15 @@ import { STORES as STORES_FALLBACK } from '../types';
 // migration não foi rodada — cai de volta pro array fixo em `types/index.ts`,
 // então o app nunca quebra por causa disso.
 
-type StoreRow = { id: string; name: string; display_name: string };
+type StoreRow = { id: string; name: string; display_name: string; price_per_cut?: number | null };
 
 function rowToStore(row: StoreRow): Store {
-  return { id: row.id, name: row.name, displayName: row.display_name };
+  return {
+    id: row.id,
+    name: row.name,
+    displayName: row.display_name,
+    pricePerCut: row.price_per_cut ?? undefined,
+  };
 }
 
 export async function fetchStores(): Promise<Store[]> {
@@ -67,23 +72,28 @@ export async function fetchAccessibleStores(userId: string): Promise<Store[]> {
 
 export async function createStore(store: Store): Promise<{ error: Error | null }> {
   if (!supabase) return { error: new Error('Supabase não está configurado.') };
-  const { error } = await supabase.from('stores').insert({
+  const payload: Record<string, unknown> = {
     id: store.id,
     name: store.name,
     display_name: store.displayName,
-  });
+  };
+  if (store.pricePerCut !== undefined) payload.price_per_cut = store.pricePerCut;
+
+  const { error } = await supabase.from('stores').insert(payload);
   if (error) reportError(error, 'stores.createStore');
   return { error: error ? new Error(error.message) : null };
 }
 
 export async function updateStore(
   id: string,
-  updates: Partial<Pick<Store, 'name' | 'displayName'>>
+  updates: Partial<Pick<Store, 'name' | 'displayName'>> & { pricePerCut?: number | null }
 ): Promise<{ error: Error | null }> {
   if (!supabase) return { error: new Error('Supabase não está configurado.') };
-  const payload: Record<string, string> = {};
+  const payload: Record<string, unknown> = {};
   if (updates.name !== undefined) payload.name = updates.name;
   if (updates.displayName !== undefined) payload.display_name = updates.displayName;
+  // null explícito apaga o preço (volta a "não definido"); undefined = não mexe no campo.
+  if (updates.pricePerCut !== undefined) payload.price_per_cut = updates.pricePerCut;
 
   const { error } = await supabase.from('stores').update(payload).eq('id', id);
   if (error) reportError(error, 'stores.updateStore');

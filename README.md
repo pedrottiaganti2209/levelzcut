@@ -4,6 +4,14 @@ Dashboard gerencial de faturamento para a barbearia LevelzCut. Permite lançar
 cortes diários/mensais por loja e visualizar relatórios, estatísticas e
 insights de faturamento.
 
+**Nota de marca (H27):** o produto passou a se chamar **Trimnex** na
+interface (header dos dois apps, título da aba do navegador) — "LevelzCut"
+continua só como o nome da barbearia cliente que usa o produto hoje (dado
+cadastrado, ex.: a loja "LevelzCut Moema" em `stores`), não mais como marca
+do software em si. Este README, o nome do repositório e o `package.json`
+ainda dizem "LevelzCut" — renomear isso é uma decisão à parte, fora do
+escopo desta mudança (que foi só visual, no header).
+
 ## Stack
 
 - [React 19](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/)

@@ -48,6 +48,12 @@ export async function fetchAllCutsData(): Promise<Record<string, MonthData[]>> {
   return result;
 }
 
+// H23: limiar de "loja em queda" — ≥ 20% abaixo da própria média
+// histórica, exigindo a comparação em número bruto (não arredondado)
+// pra uma loja exatamente em 20% nunca oscilar entre marcada/não marcada
+// por erro de arredondamento.
+export const DECLINE_THRESHOLD = 0.2;
+
 export interface StoreOverviewRow {
   store: Store;
   currentMonthCuts: number;
@@ -55,14 +61,18 @@ export interface StoreOverviewRow {
   revenue: number | null;
   average: number;
   monthsWithData: number;
+  /** H23: só true com >= 2 meses de histórico com dado — loja nova nunca é marcada. */
+  isDeclining: boolean;
+  /** % abaixo da média (arredondado, só pra exibição) — null quando isDeclining é false. */
+  declinePercent: number | null;
 }
 
 /**
  * Uma linha por loja: cortes do mês corrente, receita (se a loja tem
- * price_per_cut) e média histórica — reaproveita getAverage de
- * utils/analytics.ts, a MESMA função do card "Média Mensal" do app de
- * barbeiro (mesma semântica: inclui o mês corrente na média quando ele já
- * tem dado lançado).
+ * price_per_cut), média histórica e sinal de queda (H23) — reaproveita
+ * getAverage de utils/analytics.ts, a MESMA função do card "Média
+ * Mensal" do app de barbeiro (mesma semântica: inclui o mês corrente na
+ * média quando ele já tem dado lançado).
  */
 export function buildStoreOverviewRows(
   stores: Store[],
@@ -81,7 +91,13 @@ export function buildStoreOverviewRows(
     const average = getAverage(summaries);
     const monthsWithData = summaries.filter((s) => s.total > 0).length;
     const revenue = store.pricePerCut !== undefined ? currentMonthCuts * store.pricePerCut : null;
-    return { store, currentMonthCuts, revenue, average, monthsWithData };
+
+    const hasEnoughHistory = monthsWithData >= 2 && average > 0;
+    const declineRatio = hasEnoughHistory ? (average - currentMonthCuts) / average : 0;
+    const isDeclining = hasEnoughHistory && declineRatio >= DECLINE_THRESHOLD;
+    const declinePercent = isDeclining ? Math.round(declineRatio * 100) : null;
+
+    return { store, currentMonthCuts, revenue, average, monthsWithData, isDeclining, declinePercent };
   });
 }
 

@@ -57,6 +57,75 @@ describe('buildStoreOverviewRows', () => {
   });
 });
 
+describe('loja em queda (H23)', () => {
+  it('≥ 2 meses de histórico e queda de ~25% frente à própria média: marcada', () => {
+    // 5 meses anteriores com 100 cortes, mês corrente com 75 — queda real
+    // frente à média (que inclui o mês corrente, mesma semântica de
+    // getAverage/"Média Mensal" do app de barbeiro).
+    const cutsByStore = {
+      moema: months([
+        [2026, 3, 100],
+        [2026, 4, 100],
+        [2026, 5, 100],
+        [2026, 6, 100],
+        [2026, 7, 100],
+        [2026, 8, 75],
+      ]),
+    };
+    const [row] = buildStoreOverviewRows([MOEMA], cutsByStore, TODAY);
+    expect(row.monthsWithData).toBe(6);
+    expect(row.isDeclining).toBe(true);
+    expect(row.declinePercent).toBeGreaterThanOrEqual(20);
+  });
+
+  it('exatamente 20% abaixo da média: marcada (regra é "≥ 20%", sem oscilar por arredondamento)', () => {
+    // 1 mês anterior com 30, mês corrente com 20 → média (30+20)/2 = 25;
+    // (25-20)/25 = 0.2 exatamente, em número bruto, não arredondado.
+    const cutsByStore = { moema: months([[2026, 7, 30], [2026, 8, 20]]) };
+    const [row] = buildStoreOverviewRows([MOEMA], cutsByStore, TODAY);
+    expect(row.average).toBe(25);
+    expect(row.isDeclining).toBe(true);
+    expect(row.declinePercent).toBe(20);
+  });
+
+  it('19,6% abaixo da média (menor que 20%): não marcada', () => {
+    // 1 mês anterior com 30, mês corrente com 21 → média 25,5;
+    // (25,5-21)/25,5 ≈ 17,6% — abaixo do limiar.
+    const cutsByStore = { moema: months([[2026, 7, 30], [2026, 8, 21]]) };
+    const [row] = buildStoreOverviewRows([MOEMA], cutsByStore, TODAY);
+    expect(row.isDeclining).toBe(false);
+    expect(row.declinePercent).toBeNull();
+  });
+
+  it('loja com só 1 mês de histórico nunca é marcada, mesmo com "queda" de 100% no cálculo bruto', () => {
+    // Único mês com dado é um mês passado (200); mês corrente sem
+    // lançamento nenhum (0) — sem a checagem de >= 2 meses, isso pareceria
+    // uma queda de 100%.
+    const cutsByStore = { moema: months([[2026, 5, 200]]) };
+    const [row] = buildStoreOverviewRows([MOEMA], cutsByStore, TODAY);
+    expect(row.monthsWithData).toBe(1);
+    expect(row.isDeclining).toBe(false);
+    expect(row.declinePercent).toBeNull();
+  });
+
+  it('loja recém-criada sem nenhum histórico nunca é marcada', () => {
+    const [row] = buildStoreOverviewRows([MOEMA], {}, TODAY);
+    expect(row.isDeclining).toBe(false);
+  });
+
+  it('o total de lojas em queda bate com a quantidade de linhas marcadas', () => {
+    const cutsByStore = {
+      moema: months([[2026, 7, 30], [2026, 8, 20]]), // 20% — em queda
+      pinheiros: months([[2026, 7, 30], [2026, 8, 21]]), // ~17,6% — não
+      vila: months([[2026, 3, 50], [2026, 8, 20]]), // ~43% — em queda
+    };
+    const rows = buildStoreOverviewRows([MOEMA, PINHEIROS, VILA], cutsByStore, TODAY);
+    const decliningRows = rows.filter((r) => r.isDeclining);
+    expect(decliningRows.length).toBe(2);
+    expect(decliningRows.map((r) => r.store.id).sort()).toEqual(['moema', 'vila']);
+  });
+});
+
 describe('sortOverviewRows', () => {
   it('com preços mistos (algumas lojas sem preço), ordena por cortes', () => {
     const rows = buildStoreOverviewRows(
@@ -164,5 +233,31 @@ describe('OverviewPanel (render)', () => {
     expect(await screen.findByText('LevelzCut Moema')).toBeTruthy();
     expect(screen.getByText('LevelzCut Pinheiros')).toBeTruthy();
     expect(screen.getByText(/ordenado por cortes/i)).toBeTruthy();
+  });
+
+  it('H23: o número no card "Loja em queda" bate com a quantidade de linhas destacadas no ranking', async () => {
+    vi.doMock('../hooks/useStores', () => ({
+      useStores: () => ({ stores: [MOEMA, PINHEIROS], loading: false, reload: vi.fn() }),
+    }));
+    vi.doMock('../lib/networkData', async () => {
+      const actual = await vi.importActual<typeof import('../lib/networkData')>('../lib/networkData');
+      return {
+        ...actual,
+        // moema: 30 → 20 = 20% de queda (marcada). pinheiros: 30 → 21 ≈ 17,6% (não marcada).
+        fetchAllCutsData: vi.fn().mockResolvedValue({
+          moema: months([[2026, 7, 30], [2026, 8, 20]]),
+          pinheiros: months([[2026, 7, 30], [2026, 8, 21]]),
+        }),
+      };
+    });
+
+    const { OverviewPanel } = await import('../components/Admin/OverviewPanel');
+    render(<OverviewPanel />);
+
+    await screen.findByText('LevelzCut Moema');
+    // Card "Loja em queda" mostra 1 (só moema está em queda).
+    expect(screen.getByText('Loja em queda').closest('button')?.textContent).toContain('1');
+    // Só a linha da Moema tem o ícone/tooltip de queda — Pinheiros não.
+    expect(screen.getByTitle(/abaixo da média histórica desta loja/i)).toBeTruthy();
   });
 });

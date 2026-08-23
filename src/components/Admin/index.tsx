@@ -1,14 +1,16 @@
 import { useState } from 'react';
+import { OverviewPanel } from './OverviewPanel';
 import { StoresPanel } from './StoresPanel';
 import { BarbersPanel } from './BarbersPanel';
 
 export function AdminPanel() {
-  const [tab, setTab] = useState<'stores' | 'barbers'>('stores');
+  const [tab, setTab] = useState<'overview' | 'stores' | 'barbers'>('overview');
 
   return (
     <div className="space-y-4">
       <div className="flex gap-1 bg-gray-900 rounded-lg p-1 w-fit border border-gray-800">
         {([
+          ['overview', 'Visão Geral'],
           ['stores', 'Lojas'],
           ['barbers', 'Barbeiros'],
         ] as const).map(([id, label]) => (
@@ -23,7 +25,9 @@ export function AdminPanel() {
           </button>
         ))}
       </div>
-      {tab === 'stores' ? <StoresPanel /> : <BarbersPanel />}
+      {tab === 'overview' && <OverviewPanel />}
+      {tab === 'stores' && <StoresPanel />}
+      {tab === 'barbers' && <BarbersPanel />}
     </div>
   );
 }

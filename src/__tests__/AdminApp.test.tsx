@@ -24,6 +24,7 @@ afterEach(() => {
   vi.doUnmock('../lib/supabase');
   vi.doUnmock('../lib/profile');
   vi.doUnmock('../lib/stores');
+  vi.doUnmock('../lib/networkData');
   vi.resetModules();
 });
 
@@ -83,15 +84,20 @@ describe('AdminApp (H11)', () => {
       const actual = await vi.importActual<typeof import('../lib/stores')>('../lib/stores');
       return { ...actual, fetchStores: vi.fn().mockResolvedValue([MOEMA]) };
     });
+    vi.doMock('../lib/networkData', async () => {
+      const actual = await vi.importActual<typeof import('../lib/networkData')>('../lib/networkData');
+      return { ...actual, fetchAllCutsData: vi.fn().mockResolvedValue({}) };
+    });
 
     const { default: AdminApp } = await import('../AdminApp');
     render(<AdminApp />);
 
     expect(await screen.findByText('Administração')).toBeTruthy();
-    // "Lojas" aparece duas vezes nesse estado (a aba e o título do painel,
-    // que é o painel padrão ao abrir) — só "Barbeiros" (a outra aba) é
-    // inequívoco.
-    expect(screen.getAllByText('Lojas').length).toBeGreaterThan(0);
+    // H22: "Visão Geral" é a aba padrão (landing) ao abrir — aparece duas
+    // vezes (aba + título do painel). Lojas/Barbeiros são só as outras
+    // abas, sem painel próprio visível ainda, então cada uma é única.
+    expect(screen.getAllByText('Visão Geral').length).toBeGreaterThan(0);
+    expect(screen.getByText('Lojas')).toBeTruthy();
     expect(screen.getByText('Barbeiros')).toBeTruthy();
   });
 

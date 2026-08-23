@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { OverviewPanel } from './OverviewPanel';
 import { StoresPanel } from './StoresPanel';
 import { BarbersPanel } from './BarbersPanel';
+import { AdminsPanel } from './AdminsPanel';
 
 export function AdminPanel() {
-  const [tab, setTab] = useState<'overview' | 'stores' | 'barbers'>('overview');
+  const [tab, setTab] = useState<'overview' | 'stores' | 'barbers' | 'admins'>('overview');
 
   return (
     <div className="space-y-4">
@@ -13,6 +14,7 @@ export function AdminPanel() {
           ['overview', 'Visão Geral'],
           ['stores', 'Lojas'],
           ['barbers', 'Barbeiros'],
+          ['admins', 'Administradores'],
         ] as const).map(([id, label]) => (
           <button
             key={id}
@@ -28,6 +30,7 @@ export function AdminPanel() {
       {tab === 'overview' && <OverviewPanel />}
       {tab === 'stores' && <StoresPanel />}
       {tab === 'barbers' && <BarbersPanel />}
+      {tab === 'admins' && <AdminsPanel />}
     </div>
   );
 }

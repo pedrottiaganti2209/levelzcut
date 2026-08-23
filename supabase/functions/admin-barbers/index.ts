@@ -83,20 +83,22 @@ function generateTempPassword(): string {
   return crypto.randomUUID().replace(/-/g, '').slice(0, 12);
 }
 
-async function createBarber(
+// H10 (barbeiro) / H25 (admin): lógica compartilhada de criar conta com
+// senha temporária definida pelo servidor, em vez do convite por email
+// do H8 original — não depende do provedor de email do Supabase estar
+// configurado/testado. `email_confirm: true` pula a confirmação por
+// email (não tem link de confirmação sendo enviado aqui). A senha só é
+// retornada UMA VEZ nesta resposta — quem cadastrou precisa repassar por
+// fora (WhatsApp, verbalmente etc.); não fica salva em lugar nenhum
+// recuperável depois disso.
+async function createUser(
   adminClient: ReturnType<typeof createClient>,
   email: string,
+  role: 'admin' | 'barbeiro',
   storeIds: string[]
 ): Promise<{ userId: string; email: string; tempPassword: string }> {
   if (!email || !email.includes('@')) throw new Error('Email inválido.');
 
-  // H10: cria a conta já com senha temporária definida pelo servidor, em
-  // vez do convite por email do H8 — não depende do provedor de email do
-  // Supabase estar configurado/testado. `email_confirm: true` pula a
-  // confirmação por email (não tem link de confirmação sendo enviado
-  // aqui). A senha só é retornada UMA VEZ nesta resposta — o admin
-  // precisa repassar ao barbeiro por fora (WhatsApp, verbalmente etc.);
-  // não fica salva em lugar nenhum recuperável depois disso.
   const tempPassword = generateTempPassword();
   const { data, error } = await adminClient.auth.admin.createUser({
     email,
@@ -111,9 +113,11 @@ async function createBarber(
   // complete_password_setup abaixo, e ChangePassword.tsx no front).
   const { error: profileError } = await adminClient
     .from('profiles')
-    .upsert({ user_id: userId, role: 'barbeiro', must_change_password: true }, { onConflict: 'user_id' });
+    .upsert({ user_id: userId, role, must_change_password: true }, { onConflict: 'user_id' });
   if (profileError) throw profileError;
 
+  // Só relevante pra barbeiro — admin não é restringido por loja em
+  // nenhuma tela nem policy, então nunca chega aqui com storeIds.
   if (storeIds.length > 0) {
     const { error: storesError } = await adminClient
       .from('barber_stores')
@@ -122,6 +126,18 @@ async function createBarber(
   }
 
   return { userId, email, tempPassword };
+}
+
+function createBarber(adminClient: ReturnType<typeof createClient>, email: string, storeIds: string[]) {
+  return createUser(adminClient, email, 'barbeiro', storeIds);
+}
+
+// H25: admin cadastra outro admin, mesmo fluxo de senha temporária do
+// H10 — sem seleção de loja, porque admin nunca é restringido por loja
+// (nem no seletor do app, nem na RLS de cuts_data quando a migration 004
+// estiver ativa: is_admin(auth.uid()) já libera tudo).
+function createAdmin(adminClient: ReturnType<typeof createClient>, email: string) {
+  return createUser(adminClient, email, 'admin', []);
 }
 
 async function deleteBarber(
@@ -231,6 +247,8 @@ Deno.serve(async (req: Request) => {
         return json(await listBarbers(adminClient));
       case 'create_barber':
         return json(await createBarber(adminClient, body.email, body.storeIds ?? []));
+      case 'create_admin':
+        return json(await createAdmin(adminClient, body.email));
       case 'update_access':
         return json(await updateAccess(adminClient, body.userId, body.storeIds ?? []));
       case 'delete_barber':

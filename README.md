@@ -305,6 +305,24 @@ escolhidos, e o código da função lê exatamente esses nomes. Até isso ser
 feito, o painel de Lojas funciona normalmente, mas o painel de Barbeiros
 mostra erro ao tentar cadastrar ou listar — sem quebrar o resto do app.
 
+### Painel de Administradores (H25)
+
+Aba **Administradores**, mesmo padrão do painel de Barbeiros: cadastra
+outro admin por email, com senha temporária gerada no servidor (mesmo
+fluxo do H10) — sem seleção de loja, porque admin nunca é restringido por
+loja em nenhuma tela nem policy (vê e gerencia tudo). Reaproveita a mesma
+ação `list` da Edge Function (que já devolve todo mundo, com o papel de
+cada um) e a mesma ação `delete_barber` pra apagar — só filtra pelo papel
+certo em cada painel: Barbeiros mostra só `role='barbeiro'`,
+Administradores só `role='admin'`. Nenhuma Edge Function nova, nenhuma
+migration nova — só a ação `create_admin` a mais na função já existente
+(`admin-barbers`), então **precisa publicar a função de novo** depois
+desta mudança pra ação existir em produção (mesmo passo manual de sempre,
+acima).
+
+Como qualquer exclusão nesse painel, a função recusa se for a própria
+conta de quem chamou — evita um admin se trancar fora sem querer.
+
 ### Apagar lojas e barbeiros
 
 O painel de Lojas e o de Barbeiros têm um botão de apagar (ícone de

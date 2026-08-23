@@ -43,7 +43,10 @@ export function BarbersPanel() {
       setLoadError(error);
       return;
     }
-    setBarbers(data ?? []);
+    // listBarbers() devolve TODOS os usuários (a ação 'list' da Edge
+    // Function não distingue papel) — admins têm sua própria lista agora
+    // (H25, AdminsPanel), então não aparecem misturados aqui.
+    setBarbers((data ?? []).filter((b) => b.role === 'barbeiro'));
   };
 
   useEffect(() => {

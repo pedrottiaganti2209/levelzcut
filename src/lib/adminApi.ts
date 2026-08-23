@@ -48,6 +48,15 @@ export function updateBarberAccess(userId: string, storeIds: string[]) {
   return invoke<{ ok: true }>('update_access', { userId, storeIds });
 }
 
+/**
+ * Cadastra outro admin, mesmo fluxo de senha temporária do H10 (H25) —
+ * sem seleção de loja: admin nunca é restringido por loja em nenhuma
+ * tela nem policy.
+ */
+export function createAdmin(email: string) {
+  return invoke<{ userId: string; email: string; tempPassword: string }>('create_admin', { email });
+}
+
 /** Apaga a conta do barbeiro (Supabase Auth) — a função no servidor recusa se for a própria conta de quem chamou. */
 export function deleteBarber(userId: string) {
   return invoke<{ ok: true }>('delete_barber', { userId });

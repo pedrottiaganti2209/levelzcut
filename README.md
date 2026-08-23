@@ -399,6 +399,60 @@ aplicada ou não (remove qualquer uma das duas policies anteriores de
 `cuts_data`) — na prática, torna a 002 dispensável, porque a policy nova já
 exige autenticação por si só (além de exigir a loja certa).
 
+## Mundo 3 — Dono da Rede (H21–H24)
+
+Quatro histórias aditivas, só no app de administração — nenhuma toca em
+`index.html`/`App.tsx` (app de barbeiro). Numeração retomada em H21 porque
+H12–H20 foram usadas em versões anteriores deste review e H13/H19 foram
+retratadas.
+
+### Preço médio por corte, por loja (H21)
+
+Coluna nullable `price_per_cut` em `stores` — migration
+`supabase/migrations/007_store_price_per_cut.sql` (renumerada de 006:
+esse número já tinha sido usado por `006_public_store_read.sql`, a
+correção de RLS de leitura pública de `stores`, aplicada antes desta
+história). 100% aditiva: loja sem preço cadastrado continua se
+comportando exatamente como antes em qualquer tela existente.
+
+**Passo manual — aplicar a migration**: copie o conteúdo de
+`007_store_price_per_cut.sql` no SQL Editor do Supabase. Pode rodar a
+qualquer momento — não depende de nenhuma migration além da 003.
+
+No painel de Lojas, cada loja ganha um campo "Preço médio por corte
+(R$)" editável, com "não definido" como placeholder até ser cadastrado.
+
+### Aba Visão Geral (H22)
+
+Nova aba, primeira (landing) do app de administração — consolida
+faturamento e cortes de **todas** as lojas numa tela só, com ranking.
+Não cria nenhuma tabela nova: só lê `stores` e `cuts_data` (a policy de
+admin em `cuts_data`, da migration 004, já libera essa leitura sem
+filtro por loja — nenhuma policy nova é necessária). Faturamento da rede
+soma só as lojas com preço cadastrado (H21); se nem toda loja tiver
+preço, o ranking ordena por total de cortes em vez de faturamento, com
+um aviso indicando isso. Implementado com barras em CSS puro — Recharts
+não entra no bundle do admin (o app de barbeiro já paga esse custo, o de
+administração não precisa).
+
+### Alerta de loja em queda (H23)
+
+Estende a Visão Geral (H22): loja com pelo menos 2 meses de histórico
+cuja receita do mês corrente está ≥20% abaixo da própria média histórica
+(mesma função `getAverage` do card "Média Mensal" do app de barbeiro)
+ganha um destaque visual no ranking — só informativo, nunca esconde ou
+bloqueia a loja. Um card no topo conta quantas lojas estão nessa
+condição e leva até elas no ranking. Loja com menos de 2 meses de
+histórico nunca é avaliada, pra não marcar loja nova sem base de
+comparação.
+
+### Busca em Lojas e Barbeiros (H24)
+
+Campo de busca no topo de cada painel — por nome da loja ou email do
+barbeiro, case-insensitive, inteiramente client-side sobre os dados que
+os painéis já buscam (sem chamada nova ao Supabase). Sem busca ativa, o
+comportamento é idêntico ao de antes desta história.
+
 ## Estrutura do projeto
 
 Dois pontos de entrada (H11) — `index.html`/`main.tsx` (app de barbeiro) e

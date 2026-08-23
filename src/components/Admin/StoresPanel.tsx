@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Store as StoreIcon, Plus, RefreshCw, Trash2, Check } from 'lucide-react';
+import { Store as StoreIcon, Plus, RefreshCw, Trash2, Check, Search } from 'lucide-react';
 import { useStores } from '../../hooks/useStores';
 import { createStore, deleteStore, updateStore, slugifyStoreId } from '../../lib/stores';
 import type { Store } from '../../types';
@@ -80,6 +80,13 @@ export function StoresPanel() {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // H24: filtro client-side por nome — sem chamada nova ao Supabase, opera
+  // sobre a lista que useStores já buscou.
+  const [search, setSearch] = useState('');
+  const filteredStores = stores.filter((store) =>
+    store.displayName.toLowerCase().includes(search.trim().toLowerCase())
+  );
 
   const handleDelete = async (storeId: string) => {
     setDeleteError(null);
@@ -193,8 +200,23 @@ export function StoresPanel() {
         </p>
       )}
 
+      <div className="relative">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar loja por nome..."
+          aria-label="Buscar loja por nome"
+          className="w-full bg-black border border-gray-700 rounded pl-9 pr-3 py-2 text-sm text-white focus:outline-none focus:border-yellow-600"
+        />
+      </div>
+
+      {search.trim() !== '' && filteredStores.length === 0 && (
+        <p className="text-sm text-gray-500">Nenhuma loja encontrada para "{search.trim()}".</p>
+      )}
+
       <div className="space-y-2">
-        {stores.map((store) => (
+        {filteredStores.map((store) => (
           <div key={store.id} className="bg-gray-900 border border-gray-800 rounded-lg p-3">
             <div className="flex items-center justify-between">
               <div>

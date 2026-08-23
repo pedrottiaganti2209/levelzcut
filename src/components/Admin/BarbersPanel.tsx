@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Users, UserPlus, RefreshCw, Copy, Check, Trash2 } from 'lucide-react';
+import { Users, UserPlus, RefreshCw, Copy, Check, Trash2, Search } from 'lucide-react';
 import { useStores } from '../../hooks/useStores';
 import { listBarbers, createBarber, updateBarberAccess, deleteBarber, type Barber } from '../../lib/adminApi';
 
@@ -26,6 +26,13 @@ export function BarbersPanel() {
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // H24: filtro client-side por email — sem chamada nova ao Supabase, opera
+  // sobre a lista que listBarbers() já buscou.
+  const [search, setSearch] = useState('');
+  const filteredBarbers = barbers.filter((barber) =>
+    (barber.email ?? '').toLowerCase().includes(search.trim().toLowerCase())
+  );
 
   const reload = async () => {
     setLoading(true);
@@ -172,6 +179,21 @@ export function BarbersPanel() {
         </div>
       )}
 
+      <div className="relative">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar barbeiro por email..."
+          aria-label="Buscar barbeiro por email"
+          className="w-full bg-black border border-gray-700 rounded pl-9 pr-3 py-2 text-sm text-white focus:outline-none focus:border-yellow-600"
+        />
+      </div>
+
+      {search.trim() !== '' && filteredBarbers.length === 0 && (
+        <p className="text-sm text-gray-500">Nenhum barbeiro encontrado para "{search.trim()}".</p>
+      )}
+
       {showForm && (
         <form onSubmit={handleCreate} className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
           <div className="space-y-1">
@@ -219,7 +241,7 @@ export function BarbersPanel() {
       )}
 
       <div className="space-y-2">
-        {barbers.map((barber) => (
+        {filteredBarbers.map((barber) => (
           <div key={barber.userId} className="bg-gray-900 border border-gray-800 rounded-lg p-3">
             <div className="flex items-center justify-between">
               <div>

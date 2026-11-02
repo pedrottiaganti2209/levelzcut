@@ -41,3 +41,9 @@ export function onAuthStateChange(callback: (session: Session | null) => void) {
   if (!supabase) return { data: { subscription: { unsubscribe: () => {} } } };
   return supabase.auth.onAuthStateChange((_event, session) => callback(session));
 }
+
+export async function saveDisplayName(name: string): Promise<string | null> {
+  if (!supabase) return 'Supabase não está configurado.';
+  const { error } = await supabase.auth.updateUser({ data: { display_name: name } });
+  return error ? error.message : null;
+}

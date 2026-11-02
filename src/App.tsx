@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { Header } from './components/Header';
 import { Login } from './components/Login';
 import { ChangePassword } from './components/ChangePassword';
+import { SetDisplayName } from './components/SetDisplayName';
 import { StoreSelector } from './components/StoreSelector';
 import { DataEntry } from './components/DataEntry';
 import { Reports } from './components/Reports';
@@ -12,7 +13,7 @@ import { useAccessibleStores } from './hooks/useAccessibleStores';
 import { useUserRole } from './hooks/useUserRole';
 import type { Store } from './types';
 import { STORES } from './types';
-import { isAuthRequired, getSession, onAuthStateChange, signOut } from './lib/supabase';
+import { isAuthRequired, getSession, onAuthStateChange, signOut, saveDisplayName } from './lib/supabase';
 import { Cloud, CloudOff, RefreshCw, Lock } from 'lucide-react';
 
 // H11: este é o app de barbeiro — relatórios e lançamento de dados. Cadastro
@@ -87,9 +88,17 @@ export default function App() {
     return <ChangePassword onDone={markPasswordChanged} />;
   }
 
+  const displayName =
+    (session?.user?.user_metadata?.display_name as string | undefined) ||
+    session?.user?.email?.split('@')[0];
+
+  if (isAuthRequired && session && !session.user.user_metadata?.display_name) {
+    return <SetDisplayName onSave={saveDisplayName} />;
+  }
+
   return (
     <div className="min-h-screen bg-black text-white">
-      <Header onSignOut={isAuthRequired ? () => signOut() : undefined} username={session?.user?.email?.split('@')[0]} />
+      <Header onSignOut={isAuthRequired ? () => signOut() : undefined} username={displayName} />
       <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
         {noAccessibleStores ? (
           <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">

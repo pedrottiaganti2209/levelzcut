@@ -1,6 +1,6 @@
 import type { MonthSummary } from '../types';
 import { generateInsights } from '../utils/insights';
-import { Sparkles } from 'lucide-react';
+import { Lightbulb } from 'lucide-react';
 
 interface Props {
   summaries: MonthSummary[];
@@ -20,14 +20,14 @@ export function AIInsights({ summaries, today }: Props) {
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
       <div className="flex items-center gap-2 mb-4">
-        <Sparkles size={18} className="text-yellow-500" />
+        <Lightbulb size={18} className="text-yellow-500" />
         <h3 className="text-yellow-500 font-semibold uppercase tracking-wider text-sm">
-          Insights de IA
+          Dicas
         </h3>
       </div>
 
       {insights.length === 0 ? (
-        <p className="text-gray-600 text-sm">Lance dados para ver os insights.</p>
+        <p className="text-gray-600 text-sm">Lance dados para ver as dicas.</p>
       ) : (
         <div className="grid md:grid-cols-2 gap-3">
           {insights.map((insight, i) => (

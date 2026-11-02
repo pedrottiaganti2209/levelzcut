@@ -89,7 +89,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-black text-white">
-      <Header onSignOut={isAuthRequired ? () => signOut() : undefined} />
+      <Header onSignOut={isAuthRequired ? () => signOut() : undefined} username={session?.user?.email?.split('@')[0]} />
       <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
         {noAccessibleStores ? (
           <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">

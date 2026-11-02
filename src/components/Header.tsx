@@ -5,9 +5,10 @@ interface HeaderProps {
   onSignOut?: () => void;
   /** H11: o app de administração reaproveita este Header com um rótulo diferente. */
   subtitle?: string;
+  username?: string;
 }
 
-export function Header({ onSignOut, subtitle = 'Dashboard Gerencial' }: HeaderProps) {
+export function Header({ onSignOut, subtitle = 'Dashboard Gerencial', username }: HeaderProps) {
   return (
     <header className="bg-black border-b border-yellow-600 py-4 px-6">
       <div className="max-w-6xl mx-auto flex items-center gap-4">
@@ -16,6 +17,9 @@ export function Header({ onSignOut, subtitle = 'Dashboard Gerencial' }: HeaderPr
         </div>
         <h1 className="text-2xl font-bold text-yellow-500 tracking-widest uppercase">Trimnex</h1>
         <div className="ml-auto flex items-center gap-4">
+          {username && (
+            <span className="text-sm text-gray-300">Olá, <span className="text-yellow-500 font-medium">{username}</span></span>
+          )}
           <span className="text-xs text-gray-500 uppercase tracking-widest">{subtitle}</span>
           {onSignOut && (
             <button
